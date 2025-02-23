@@ -4,6 +4,7 @@ class TradingMode(Enum):
     BACKTEST = "backtest"
     PAPER_TRADING = "paper_trading"
     LIVE = "live"
+    PERPETUAL_LIVE = "perpetual_live"
 
     @staticmethod
     def from_string(mode_str: str):

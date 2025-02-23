@@ -16,28 +16,28 @@ class BalanceTracker:
         quote_currency: str,
     ):
         """
-        Initializes the BalanceTracker.
+        初始化 BalanceTracker。
 
-        Args:
-            event_bus: The event bus instance for subscribing to events.
-            fee_calculator: The fee calculator instance for calculating trading fees.
-            trading_mode: "BACKTEST", "LIVE" or "PAPER_TRADING".
-            base_currency: The base currency symbol.
-            quote_currency: The quote currency symbol.
+        参数:
+            event_bus: 事件总线实例，用于订阅事件。
+            fee_calculator: 费用计算器实例，用于计算交易费用。
+            trading_mode: 交易模式，可以是 "BACKTEST"、"LIVE" 或 "PAPER_TRADING"。
+            base_currency: 基础货币符号（通常为加密货币，如 BTC）。
+            quote_currency: 报价货币符号（通常为法币，如 USD）。
         """
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.event_bus: EventBus = event_bus
-        self.fee_calculator: FeeCalculator = fee_calculator
-        self.trading_mode: TradingMode = trading_mode
-        self.base_currency: str = base_currency
-        self.quote_currency: str = quote_currency
+        self.logger = logging.getLogger(self.__class__.__name__)# 初始化日志记录器
+        self.event_bus: EventBus = event_bus# 事件总线，用于接收订单完成事件
+        self.fee_calculator: FeeCalculator = fee_calculator# 费用计算器，用于计算交易费用
+        self.trading_mode: TradingMode = trading_mode# 交易模式，决定余额初始化方式
+        self.base_currency: str = base_currency# 基础货币符号（加密货币）
+        self.quote_currency: str = quote_currency# 报价货币符号（法币）
 
-        self.balance: float = 0.0
-        self.crypto_balance: float = 0.0
-        self.total_fees: float = 0
-        self.reserved_fiat: float = 0.0
-        self.reserved_crypto: float = 0.0
-
+        self.balance: float = 0.0# 主法币余额
+        self.crypto_balance: float = 0.0# 主加密货币余额
+        self.total_fees: float = 0# 累计交易费用
+        self.reserved_fiat: float = 0.0# 预留的法币（用于挂单）
+        self.reserved_crypto: float = 0.0# 预留的加密货币（用于挂单）
+        # 订阅 ORDER_FILLED 事件，订单完成时调用更新余额的方法
         self.event_bus.subscribe(Events.ORDER_FILLED, self._update_balance_on_order_completion)
     
     async def setup_balances(
@@ -47,20 +47,22 @@ class BalanceTracker:
         exchange_service=ExchangeInterface
     ):
         """
-        Sets up the balances based on trading mode.
+        根据交易模式设置余额。
 
-        For BACKTEST mode, sets initial balances.
-        For LIVE and PAPER_TRADING modes, fetches balances dynamically from the exchange.
+        对于 BACKTEST 模式，使用传入的初始余额。
+        对于 LIVE 和 PAPER_TRADING 模式，从交易所动态获取余额。
 
-        Args:
-            initial_balance: The initial fiat balance for backtest mode.
-            initial_crypto_balance: The initial crypto balance for backtest mode.
-            exchange_service: The exchange instance (required for live and paper_trading trading).
+        参数:
+            initial_balance: 回测模式下的初始法币余额。
+            initial_crypto_balance: 回测模式下的初始加密货币余额。
+            exchange_service: 交易所接口实例（实盘和模拟交易模式需要）。
         """
         if self.trading_mode == TradingMode.BACKTEST:
+            # 回测模式，直接使用传入的初始余额
             self.balance = initial_balance
             self.crypto_balance = initial_crypto_balance
         elif self.trading_mode == TradingMode.LIVE or self.trading_mode == TradingMode.PAPER_TRADING:
+            # 实盘或模拟交易模式，从交易所异步获取实时余额
             self.balance, self.crypto_balance = await self._fetch_live_balances(exchange_service)
 
     async def _fetch_live_balances(
@@ -68,39 +70,39 @@ class BalanceTracker:
         exchange_service: ExchangeInterface
     )-> tuple[float, float]:
         """
-        Fetches live balances from the exchange asynchronously.
+        异步从交易所获取实时余额。
 
-        Args:
-            exchange_service: The exchange instance.
+        参数:
+            exchange_service: 交易所接口实例。
 
-        Returns:
-            tuple: The quote and base currency balances.
+        返回:
+            tuple: 包含法币余额和加密货币余额的元组。
         """
         balances = await exchange_service.get_balance()
 
         if not balances or 'free' not in balances:
             raise ValueError(f"Unexpected balance structure: {balances}")
-
+        # 提取报价货币（法币）的可用余额
         quote_balance = float(balances.get('free', {}).get(self.quote_currency, 0.0))
+        # 提取基础货币（加密货币）的可用余额
         base_balance = float(balances.get('free', {}).get(self.base_currency, 0.0))
         self.logger.info(f"Fetched balances - Quote: {self.quote_currency}: {quote_balance}, Base: {self.base_currency}: {base_balance}")
-        return quote_balance, base_balance
+        return quote_balance, base_balance # 返回法币和加密货币余额
 
     async def _update_balance_on_order_completion(self, order: Order) -> None:
         """
-        Updates the account balance and crypto balance when an order is filled.
+        当订单完成时更新账户的法币和加密货币余额。
 
-        This method is called when an `ORDER_FILLED` event is received. It determines 
-        whether the filled order is a buy or sell order and updates the balances 
-        accordingly.
+        此方法在接收到 ORDER_FILLED 事件时被调用，根据订单类型（买入或卖出）更新余额。
 
-        Args:
-            order: The filled `Order` object containing details such as the side 
-                (BUY/SELL), filled quantity, and price.
+        参数:
+            order: 已完成的 Order 对象，包含订单方向（BUY/SELL）、成交数量和价格等信息。
         """
         if order.side == OrderSide.BUY:
+            # 买入订单完成，更新余额
             self._update_after_buy_order_filled(order.filled, order.price)
         elif order.side == OrderSide.SELL:
+            # 卖出订单完成，更新余额
             self._update_after_sell_order_filled(order.filled, order.price)
 
     def _update_after_buy_order_filled(
@@ -109,26 +111,25 @@ class BalanceTracker:
         price: float
     ) -> None:
         """
-        Updates the balances after a buy order is completed, including handling reserved funds.
+        在买入订单完成后更新余额，包括处理预留资金。
 
-        Deducts the total cost (price * quantity + fee) from the reserved fiat balance,
-        releases any unused reserved fiat back to the main balance, adds the purchased
-        crypto quantity to the crypto balance, and tracks the fees incurred.
+        从预留法币中扣除总成本（价格 * 数量 + 费用），释放多余预留资金到主余额，
+        增加加密货币余额并记录费用。
 
-        Args:
-            quantity: The quantity of crypto purchased.
-            price: The price at which the crypto was purchased (per unit).
+        参数:
+            quantity: 购买的加密货币数量。
+            price: 购买价格（每单位）。
         """
-        fee = self.fee_calculator.calculate_fee(quantity * price)
-        total_cost = quantity * price + fee
+        fee = self.fee_calculator.calculate_fee(quantity * price)# 计算交易费用
+        total_cost = quantity * price + fee# 计算总成本
 
-        self.reserved_fiat -= total_cost
+        self.reserved_fiat -= total_cost# 从预留法币中扣除总成本
         if self.reserved_fiat < 0:
-            self.balance += self.reserved_fiat  # Adjust with excess reserved fiat
+            self.balance += self.reserved_fiat  # 如果预留不足，将多扣部分退回主余额
             self.reserved_fiat = 0
     
-        self.crypto_balance += quantity
-        self.total_fees += fee
+        self.crypto_balance += quantity # 增加加密货币余额
+        self.total_fees += fee # 累加交易费用
         self.logger.info(f"Buy order completed: {quantity} crypto purchased at {price}.")
 
     def _update_after_sell_order_filled(
@@ -137,43 +138,42 @@ class BalanceTracker:
         price: float
     ) -> None:
         """
-        Updates the balances after a sell order is completed, including handling reserved funds.
+        在卖出订单完成后更新余额，包括处理预留资金。
 
-        Deducts the sold crypto quantity from the reserved crypto balance, releases any
-        unused reserved crypto back to the main crypto balance, adds the sale proceeds
-        (quantity * price - fee) to the fiat balance, and tracks the fees incurred.
+        从预留加密货币中扣除卖出数量，释放多余预留加密货币到主余额，
+        增加法币余额（销售收益 - 费用）并记录费用。
 
-        Args:
-            quantity: The quantity of crypto sold.
-            price: The price at which the crypto was sold (per unit).
+        参数:
+            quantity: 卖出的加密货币数量。
+            price: 卖出价格（每单位）。
         """
-        fee = self.fee_calculator.calculate_fee(quantity * price)
-        sale_proceeds = quantity * price - fee
-        self.reserved_crypto -= quantity
+        fee = self.fee_calculator.calculate_fee(quantity * price)# 计算交易费用
+        sale_proceeds = quantity * price - fee# 计算销售收益
+        self.reserved_crypto -= quantity# 从预留加密货币中扣除卖出数量
 
         if self.reserved_crypto < 0:
-            self.crypto_balance += abs(self.reserved_crypto)  # Adjust with excess reserved crypto
+            self.crypto_balance += abs(self.reserved_crypto)  # 如果预留不足，将多扣部分退回主余额
             self.reserved_crypto = 0
 
-        self.balance += sale_proceeds
-        self.total_fees += fee
+        self.balance += sale_proceeds# 增加法币余额
+        self.total_fees += fee# 累加交易费用
         self.logger.info(f"Sell order completed: {quantity} crypto sold at {price}.")
     
     def update_after_initial_purchase(self, initial_order: Order):
         """
-        Updates balances after an initial crypto purchase.
+        在初始加密货币购买完成后更新余额。
 
-        Args:
-            initial_order: The Order object containing details of the completed purchase.
+        参数:
+            initial_order: 包含已完成购买详情的 Order 对象。
         """
         if initial_order.status != OrderStatus.CLOSED:
             raise ValueError(f"Order {initial_order.id} is not CLOSED. Cannot update balances.")
     
-        total_cost = initial_order.filled * initial_order.average
-        fee = self.fee_calculator.calculate_fee(initial_order.amount * initial_order.average)
+        total_cost = initial_order.filled * initial_order.average # 计算总成本
+        fee = self.fee_calculator.calculate_fee(initial_order.amount * initial_order.average)# 增加加密货币余额
         
-        self.crypto_balance += initial_order.filled
-        self.balance -= total_cost + fee
+        self.crypto_balance += initial_order.filled# 减少法币余额
+        self.balance -= total_cost + fee# 累加交易费用
         self.total_fees += fee
         self.logger.info(f"Updated balances. Crypto balance: {self.crypto_balance}, Fiat balance: {self.balance}, Total fees: {self.total_fees}")
 
@@ -182,16 +182,16 @@ class BalanceTracker:
         amount: float
     ) -> None:
         """
-        Reserves fiat for a pending buy order.
+        为挂起的卖出订单预留加密货币。
 
-        Args:
-            amount: The amount of fiat to reserve.
+        参数:
+            quantity: 要预留的加密货币数量。
         """
         if self.balance < amount:
             raise InsufficientBalanceError(f"Insufficient fiat balance to reserve {amount}.")
 
-        self.reserved_fiat += amount
-        self.balance -= amount
+        self.reserved_fiat += amount # 增加预留加密货币
+        self.balance -= amount# 减少主加密货币余额
         self.logger.info(f"Reserved {amount} fiat for a buy order. Remaining fiat balance: {self.balance}.")
 
     def reserve_funds_for_sell(
@@ -199,10 +199,10 @@ class BalanceTracker:
         quantity: float
     ) -> None:
         """
-        Reserves crypto for a pending sell order.
+        为挂起的卖出订单预留加密货币。
 
-        Args:
-            quantity: The quantity of crypto to reserve.
+        参数:
+            quantity: 要预留的加密货币数量。
         """
         if self.crypto_balance < quantity:
             raise InsufficientCryptoBalanceError(f"Insufficient crypto balance to reserve {quantity}.")
@@ -213,30 +213,30 @@ class BalanceTracker:
 
     def get_adjusted_fiat_balance(self) -> float:
         """
-        Returns the fiat balance, including reserved funds.
+        返回包括预留资金在内的总法币余额。
 
-        Returns:
-            float: The total fiat balance including reserved funds.
+        返回:
+            float: 总法币余额。
         """
         return self.balance + self.reserved_fiat
 
     def get_adjusted_crypto_balance(self) -> float:
         """
-        Returns the crypto balance, including reserved funds.
+        返回包括预留资金在内的总加密货币余额。
 
-        Returns:
-            float: The total crypto balance including reserved funds.
+        返回:
+            float: 总加密货币余额。
         """
         return self.crypto_balance + self.reserved_crypto
 
     def get_total_balance_value(self, price: float) -> float:
         """
-        Calculates the total account value in fiat, including reserved funds.
+        计算以法币计的账户总价值，包括预留资金。
 
-        Args:
-            price: The current market price of the crypto asset.
+        参数:
+            price: 加密货币的当前市场价格。
 
-        Returns:
-            float: The total account value in fiat terms.
+        返回:
+            float: 以法币计的账户总价值。
         """
         return self.get_adjusted_fiat_balance() + self.get_adjusted_crypto_balance() * price

@@ -9,3 +9,7 @@ class InsufficientCryptoBalanceError(Exception):
 class InvalidOrderQuantityError(Exception):
     """Raised when order quantity (amount) is invalid."""
     pass
+
+class InsufficientMarginError(Exception):
+    """Raised when margin is insufficient to place a buy or sell order."""
+    pass

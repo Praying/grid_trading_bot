@@ -1,6 +1,10 @@
 import cProfile, asyncio, os, logging
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
+
+from core.bot_management.bot_controller.perpetual_bot_controller import PerpetualBotController
+from core.bot_management.perpetual_grid_trading_bot import PerpetualGridTradingBot
+from core.bot_management.perpetual_health_check import PerpetualHealthCheck
 from utils.arg_parser import parse_and_validate_console_args
 from utils.performance_results_saver import save_or_append_performance_results
 from core.bot_management.bot_controller.bot_controller import BotController
@@ -29,7 +33,61 @@ def initialize_notification_handler(config_manager: ConfigManager, event_bus: Ev
     trading_mode = config_manager.get_trading_mode()
     return NotificationHandler(event_bus, notification_urls, trading_mode)
 
+
+async def run_perpetual_bot(
+        config_path: str,
+        profile: bool = False,
+        save_performance_results_path: Optional[str] = None,
+        no_plot: bool = False
+) -> Optional[Dict[str, Any]]:
+    config_manager = initialize_config(config_path)
+    config_name = generate_config_name(config_manager)
+    setup_logging(config_manager.get_logging_level(), config_manager.should_log_to_file(), config_name)
+    event_bus = EventBus()
+    notification_handler = initialize_notification_handler(config_manager, event_bus)
+    bot = PerpetualGridTradingBot(config_path, config_manager, notification_handler, event_bus, save_performance_results_path,
+                         no_plot)
+    bot_controller = PerpetualBotController(bot, event_bus)
+    health_check = PerpetualHealthCheck(bot, notification_handler, event_bus)
+
+    if profile:
+        cProfile.runctx("asyncio.run(bot.run())", globals(), locals(), "profile_results.prof")
+        return None
+
+    try:
+        if bot.trading_mode in {TradingMode.LIVE, TradingMode.PAPER_TRADING}:
+            bot_task = asyncio.create_task(bot.run(), name="BotTask")
+            bot_controller_task = asyncio.create_task(bot_controller.command_listener(), name="BotControllerTask")
+            health_check_task = asyncio.create_task(health_check.start(), name="HealthCheckTask")
+            await asyncio.gather(bot_task, bot_controller_task, health_check_task)
+        else:
+            await bot.run()
+
+    except asyncio.CancelledError:
+        logging.info("Cancellation received. Shutting down gracefully.")
+
+    except Exception as e:
+        logging.error(f"An unexpected error occurred: {e}", exc_info=True)
+
+    finally:
+        try:
+            await event_bus.shutdown()
+
+        except Exception as e:
+            logging.error(f"Error during EventBus shutdown: {e}", exc_info=True)
+
 async def run_bot(
+    config_path: str,
+    profile: bool = False,
+    save_performance_results_path: Optional[str] = None,
+    no_plot: bool = False
+) -> Optional[Dict[str, Any]]:
+    config_manager = initialize_config(config_path)
+    if config_manager.get_instrument_type() == "perpetual":
+        return await run_perpetual_bot(config_path, profile, save_performance_results_path, no_plot)
+    else:
+        return await run_spot_bot(config_path, profile, save_performance_results_path, no_plot)
+async def run_spot_bot(
     config_path: str,
     profile: bool = False, 
     save_performance_results_path: Optional[str] = None, 
@@ -99,6 +157,7 @@ if __name__ == "__main__":
     
     async def main():
         try:
+
             tasks = [
                 run_bot(config_path, args.profile, args.save_performance_results, args.no_plot)
                 for config_path in args.config

@@ -7,6 +7,7 @@ class OrderStatusTracker:
     """
     Tracks the status of pending orders and publishes events
     when their states change (e.g., open, filled, canceled).
+    订单状态追踪器，监控未完成订单状态变化并发布对应事件
     """
 
     def __init__(
@@ -24,34 +25,43 @@ class OrderStatusTracker:
             order_execution_strategy: Strategy for querying order statuses from the exchange.
             event_bus: EventBus instance for publishing state change events.
             polling_interval: Time interval (in seconds) between status checks.
+        初始化订单状态追踪器
+
+        参数:
+            order_book: 订单簿实例，用于管理/查询订单
+            order_execution_strategy: 交易所订单状态查询策略接口
+            event_bus: 事件总线实例，用于发布状态变更事件
+            polling_interval: 交易所状态轮询间隔（单位：秒）
         """
-        self.order_book = order_book
-        self.order_execution_strategy = order_execution_strategy
-        self.event_bus = event_bus
-        self.polling_interval = polling_interval
-        self._monitoring_task = None
-        self._active_tasks = set()
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.order_book = order_book # 订单簿引用
+        self.order_execution_strategy = order_execution_strategy # 交易所接口适配器
+        self.event_bus = event_bus# 事件发布总线
+        self.polling_interval = polling_interval# 轮询频率控制
+        self._monitoring_task = None# 主监控任务句柄
+        self._active_tasks = set()# 活跃子任务集合
+        self.logger = logging.getLogger(self.__class__.__name__)# 日志记录器
 
     async def _track_open_order_statuses(self) -> None:
         """
         Periodically checks the statuses of open orders and updates their states.
+        异步循环任务：持续追踪所有未成交订单状态
         """
         try:
-            while True:
-                await self._process_open_orders()
-                await asyncio.sleep(self.polling_interval)
+            while True: # 循环执行模式
+                await self._process_open_orders() # 核心处理逻辑
+                await asyncio.sleep(self.polling_interval)# 频率控制
 
-        except asyncio.CancelledError:
+        except asyncio.CancelledError:# 任务取消信号处理
             self.logger.info("OrderStatusTracker monitoring task was cancelled.")
             await self._cancel_active_tasks()
 
-        except Exception as error:
+        except Exception as error:# 全局异常捕获
             self.logger.error(f"Unexpected error in OrderStatusTracker: {error}")
 
     async def _process_open_orders(self) -> None:
         """
         Processes open orders by querying their statuses and handling state changes.
+        批量处理所有未完成订单
         """
         open_orders = self.order_book.get_open_orders()
         tasks = [self._create_task(self._query_and_handle_order(order)) for order in open_orders]
@@ -64,8 +74,10 @@ class OrderStatusTracker:
     async def _query_and_handle_order(self, local_order: Order):
         """
         Query order and handling state changes if needed.
+        # 获取所有未成交订单
         """
         try:
+            # 从交易所获取最新订单状态
             remote_order = await self.order_execution_strategy.get_order(local_order.identifier, local_order.symbol)
             self._handle_order_status_change(remote_order)
 
@@ -84,25 +96,35 @@ class OrderStatusTracker:
         
         Raises:
             ValueError: If critical fields (e.g., status) are missing from the remote order.
+
+        处理交易所返回的订单状态变更
+
+        参数:
+            remote_order: 从交易所获取的最新订单对象
+
+        异常:
+            当交易所返回数据缺失关键字段时抛出ValueError
         """
         try:
+            # 状态校验
             if remote_order.status == OrderStatus.UNKNOWN:
                 self.logger.error(f"Missing 'status' in remote order object: {remote_order}", exc_info=True)
                 raise ValueError("Order data from the exchange is missing the 'status' field.")
-            elif remote_order.status == OrderStatus.CLOSED:
+            # 状态处理分支
+            elif remote_order.status == OrderStatus.CLOSED: # 完全成交
                 self.order_book.update_order_status(remote_order.identifier, OrderStatus.CLOSED)
-                self.event_bus.publish_sync(Events.ORDER_FILLED, remote_order)
+                self.event_bus.publish_sync(Events.ORDER_FILLED, remote_order)# 发布成交事件
                 self.logger.info(f"Order {remote_order.identifier} filled.")
-            elif remote_order.status == OrderStatus.CANCELED:
+            elif remote_order.status == OrderStatus.CANCELED:# 已取消
                 self.order_book.update_order_status(remote_order.identifier, OrderStatus.CANCELED)
-                self.event_bus.publish_sync(Events.ORDER_CANCELLED, remote_order)
+                self.event_bus.publish_sync(Events.ORDER_CANCELLED, remote_order)# 发布取消事件
                 self.logger.warning(f"Order {remote_order.identifier} was canceled.")
-            elif remote_order.status == OrderStatus.OPEN:  # Still open
+            elif remote_order.status == OrderStatus.OPEN: # 未成交/部分成交
                 if remote_order.filled > 0:
                     self.logger.info(f"Order {remote_order} partially filled. Filled: {remote_order.filled}, Remaining: {remote_order.remaining}.")
                 else:
                     self.logger.info(f"Order {remote_order} is still open. No fills yet.")
-            else:
+            else:# 未处理状态
                 self.logger.warning(f"Unhandled order status '{remote_order.status}' for order {remote_order.identifier}.")
 
         except Exception as e:
@@ -132,6 +154,7 @@ class OrderStatusTracker:
     def start_tracking(self) -> None:
         """
         Starts the order tracking task.
+        启动订单状态追踪
         """
         if self._monitoring_task and not self._monitoring_task.done():
             self.logger.warning("OrderStatusTracker is already running.")
@@ -142,6 +165,7 @@ class OrderStatusTracker:
     async def stop_tracking(self) -> None:
         """
         Stops the order tracking task.
+        停止订单状态追踪
         """
         if self._monitoring_task:
             self._monitoring_task.cancel()

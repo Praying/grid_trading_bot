@@ -9,6 +9,10 @@ class Events:
     ORDER_CANCELLED = "order_cancelled"
     START_BOT = "start_bot"
     STOP_BOT = "stop_bot"
+    FUNDING_FEE_CHARGED = "funding_fee_changed"
+    FUNDING_FEE_SETTLED = "funding_fee_settled"
+    POSITION_UPDATED = "position_updated"
+    MARGIN_CALL = "margin_call"
 
 class EventBus:
     """

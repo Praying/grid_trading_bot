@@ -5,39 +5,39 @@ from strategies.strategy_type import StrategyType
 from strategies.grid_trading_strategy import GridTradingStrategy
 from strategies.plotter import Plotter
 from strategies.trading_performance_analyzer import TradingPerformanceAnalyzer
-from core.order_handling.order_manager import OrderManager
-from core.validation.order_validator import OrderValidator
+from core.order_handling.perpetual_order_manager import PerpetualOrderManager
+from core.validation.perpetual_order_validator import PerpetualOrderValidator
 from core.order_handling.order_status_tracker import OrderStatusTracker
 from core.bot_management.event_bus import EventBus, Events
 from core.order_handling.fee_calculator import FeeCalculator
-from core.order_handling.balance_tracker import BalanceTracker
-from core.order_handling.order_book import OrderBook
-from core.grid_management.grid_manager import GridManager
+from core.order_handling.perpetual_balance_tracker import PerpetualBalanceTracker
+from core.order_handling.perpetual_order_book import PerpetualOrderBook
+from core.grid_management.perpetual_grid_manager import PerpetualGridManager
 from core.order_handling.execution_strategy.order_execution_strategy_factory import OrderExecutionStrategyFactory
 from core.services.exceptions import UnsupportedExchangeError, DataFetchError, UnsupportedTimeframeError
 from config.config_manager import ConfigManager
 from config.trading_mode import TradingMode
 from .notification.notification_handler import NotificationHandler
 
-"""网格交易机器人核心实现
+"""永续合约U本位网格交易机器人核心实现
 
-该类实现了一个完整的网格交易机器人，包括以下主要功能：
-1. 初始化各种交易组件（订单管理、网格管理、余额追踪等）
+该类实现了一个完整的永续合约U本位网格交易机器人，包括以下主要功能：
+1. 初始化各种交易组件（订单管理、网格管理、保证金追踪等）
 2. 运行和停止交易策略
-3. 处理交易事件（如停止、重启等）
-4. 监控机器人健康状态
+3. 处理交易事件（如停止、重启、强平等）
+4. 监控机器人健康状态和风险
 5. 生成交易表现报告
 
 主要组件：
-- 交易所服务：负责与交易所API交互
-- 订单管理器：处理订单的创建、执行和跟踪
-- 网格管理器：维护网格价格和状态
-- 余额追踪器：监控账户余额变化
+- 交易所服务：负责与永续合约交易所API交互
+- 订单管理器：处理开平仓订单的创建、执行和跟踪
+- 网格管理器：维护多空双向网格价格和状态
+- 保证金追踪器：监控保证金和仓位信息
 - 事件总线：处理系统内部事件通信
 - 性能分析器：分析和报告交易表现
 """
 
-class GridTradingBot:
+class PerpetualGridTradingBot:
     def __init__(
         self, 
         config_path: str, 
@@ -47,7 +47,7 @@ class GridTradingBot:
         save_performance_results_path: Optional[str] = None, 
         no_plot: bool = False
     ):
-        """初始化网格交易机器人
+        """初始化永续合约网格交易机器人
 
         参数:
             config_path: 配置文件路径
@@ -77,29 +77,30 @@ class GridTradingBot:
             quote_currency: str = self.config_manager.get_quote_currency()
             trading_pair = f"{base_currency}/{quote_currency}"
             strategy_type: StrategyType = self.config_manager.get_strategy_type()
-            self.logger.info(f"Starting Grid Trading Bot in {self.trading_mode.value} mode with strategy: {strategy_type.value}")
+            self.logger.info(f"Starting Perpetual Grid Trading Bot in {self.trading_mode.value} mode with strategy: {strategy_type.value}")
             self.is_running = False
 
-            # 创建交易所服务和订单执行策略
+            # 创建永续合约交易所服务和订单执行策略
             self.exchange_service = ExchangeServiceFactory.create_exchange_service(self.config_manager, self.trading_mode)
             order_execution_strategy = OrderExecutionStrategyFactory.create(self.config_manager, self.exchange_service)
             
-            # 创建网格管理器和订单验证器
-            grid_manager = GridManager(self.config_manager, strategy_type)
-            order_validator = OrderValidator()
+            # 创建永续合约网格管理器和订单验证器
+            grid_manager = PerpetualGridManager(self.config_manager, strategy_type, config_manager.get_trading_settings()["leverage"], config_manager.get_trading_settings()["margin_mode"])
+            order_validator = PerpetualOrderValidator()
             fee_calculator = FeeCalculator(self.config_manager)
 
-            # 初始化余额追踪器
-            self.balance_tracker = BalanceTracker(
+            # 初始化永续合约保证金追踪器
+            self.balance_tracker = PerpetualBalanceTracker(
                 event_bus=self.event_bus,
                 fee_calculator=fee_calculator,
                 trading_mode=self.trading_mode,
                 base_currency=base_currency,
-                quote_currency=quote_currency
+                quote_currency=quote_currency,
+                leverage=config_manager.get_trading_settings()["leverage"],
             )
             
-            # 创建订单簿和订单状态追踪器
-            order_book = OrderBook()
+            # 创建永续合约订单簿和订单状态追踪器
+            order_book = PerpetualOrderBook()
             self.order_status_tracker = OrderStatusTracker(
                 order_book=order_book,
                 order_execution_strategy=order_execution_strategy,
@@ -107,18 +108,15 @@ class GridTradingBot:
                 polling_interval=5.0,
             )
 
-            # 创建订单管理器
-            order_manager = OrderManager(
-                grid_manager,
-                order_validator,
-                self.balance_tracker,
+            # 创建永续合约订单管理器
+            order_manager = PerpetualOrderManager(
+                self.exchange_service,
                 order_book,
+                self.balance_tracker,
+                order_validator,
                 self.event_bus,
-                order_execution_strategy,
-                self.notification_handler,
-                self.trading_mode,
-                trading_pair,
-                strategy_type
+                config_manager.get_trading_settings()["leverage"],
+                5.0,
             )
             
             # 创建交易性能分析器和图表绘制器
@@ -149,10 +147,10 @@ class GridTradingBot:
             raise
 
     async def run(self) -> Optional[Dict[str, Any]]:
-        """运行网格交易机器人
+        """运行永续合约网格交易机器人
 
         该方法执行以下步骤：
-        1. 设置初始账户余额
+        1. 设置初始保证金和仓位信息
         2. 启动订单状态追踪
         3. 初始化并运行交易策略
         4. 绘制回测结果（如果启用）
@@ -164,10 +162,9 @@ class GridTradingBot:
         try:
             self.is_running = True
 
-            # 设置初始账户余额
+            # 设置初始保证金
             await self.balance_tracker.setup_balances(
-                initial_balance=self.config_manager.get_initial_balance(),
-                initial_crypto_balance=0.0,
+                initial_margin=self.config_manager.get_initial_balance(),
                 exchange_service=self.exchange_service
             )
 
@@ -219,7 +216,7 @@ class GridTradingBot:
             self.logger.info("Bot is not running. Nothing to stop.")
             return
 
-        self.logger.info("Stopping Grid Trading Bot...")
+        self.logger.info("Stopping Perpetual Grid Trading Bot...")
 
         try:
             # 停止订单状态追踪
@@ -231,7 +228,7 @@ class GridTradingBot:
         except Exception as e:
             self.logger.error(f"Error while stopping components: {e}", exc_info=True)
 
-        self.logger.info("Grid Trading Bot has been stopped.")
+        self.logger.info("Perpetual Grid Trading Bot has been stopped.")
     
     async def restart(self) -> None:
         """重启机器人
@@ -242,7 +239,7 @@ class GridTradingBot:
             self.logger.info("Bot is already running. Restarting...")
             await self._stop()
 
-        self.logger.info("Restarting Grid Trading Bot...")
+        self.logger.info("Restarting Perpetual Grid Trading Bot...")
         self.is_running = True
 
         try:
@@ -254,7 +251,7 @@ class GridTradingBot:
         except Exception as e:
             self.logger.error(f"Error while restarting components: {e}", exc_info=True)
 
-        self.logger.info("Grid Trading Bot has been restarted.")
+        self.logger.info("Perpetual Grid Trading Bot has been restarted.")
 
     def _generate_and_log_performance(self) -> Optional[Dict[str, Any]]:
         """生成并记录性能报告
@@ -272,14 +269,15 @@ class GridTradingBot:
     async def get_bot_health_status(self) -> dict:
         """获取机器人健康状态
 
-        检查策略运行状态和交易所连接状态
+        检查策略运行状态、交易所连接状态和保证金风险
 
         返回:
-            包含策略状态、交易所状态和总体状态的字典
+            包含策略状态、交易所状态、保证金风险和总体状态的字典
         """
         health_status = {
             "strategy": await self._check_strategy_health(),
-            "exchange_status": await self._get_exchange_status()
+            "exchange_status": await self._get_exchange_status(),
+            "margin_risk": await self._check_margin_risk()
         }
 
         health_status["overall"] = all(health_status.values())
@@ -305,15 +303,28 @@ class GridTradingBot:
         exchange_status = await self.exchange_service.get_exchange_status()
         return exchange_status.get("status", "unknown")
     
-    def get_balances(self) -> Dict[str, float]:
-        """获取当前账户余额
+    async def _check_margin_risk(self) -> bool:
+        """检查保证金风险
+
+        检查当前保证金率是否接近强平线
 
         返回:
-            包含法币和加密货币余额的字典，包括已保留的金额
+            如果保证金安全返回True，否则返回False
         """
-        return {
-            "fiat": self.balance_tracker.balance,
-            "reserved_fiat": self.balance_tracker.reserved_fiat,
-            "crypto": self.balance_tracker.crypto_balance,
-            "reserved_crypto": self.balance_tracker.reserved_crypto
-        }
+        try:
+            margin_info = await self.balance_tracker.get_margin_info()
+            margin_ratio = margin_info.get("margin_ratio", 0)
+            liquidation_threshold = self.config_manager.get_liquidation_threshold()
+            
+            if margin_ratio <= liquidation_threshold:
+                self.logger.warning(f"Margin ratio ({margin_ratio}) is below liquidation threshold ({liquidation_threshold})")
+                return False
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error checking margin risk: {e}", exc_info=True)
+            await self.notification_handler.async_send_notification(
+                NotificationType.MARGIN_RISK,
+                error_details=f"Failed to check margin risk: {str(e)}"
+            )
+            return False  # 发生异常时返回False表示存在风险

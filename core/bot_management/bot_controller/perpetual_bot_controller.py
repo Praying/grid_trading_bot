@@ -1,10 +1,10 @@
 import logging, asyncio
 from tabulate import tabulate
 from core.bot_management.event_bus import EventBus, Events
-from core.bot_management.grid_trading_bot import GridTradingBot
+from core.bot_management.perpetual_grid_trading_bot import PerpetualGridTradingBot
 from .exceptions import CommandParsingError, StrategyControlError
 
-class BotController:
+class PerpetualBotController:
     """
     Handles user commands and manages the lifecycle of the GridTradingBot.
     
@@ -13,7 +13,7 @@ class BotController:
 
     def __init__(
         self, 
-        bot: GridTradingBot, 
+        bot: PerpetualGridTradingBot, 
         event_bus: EventBus
     ):
         """

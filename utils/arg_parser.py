@@ -4,19 +4,24 @@ from typing import Optional, List
 def validate_args(args):
     """
     Validates parsed arguments.
+    验证解析后的参数。
 
     Args:
         args: Parsed arguments object.
+        args: 解析后的参数对象。
     Raises:
         ValueError: If validation fails.
+        ValueError: 如果验证失败。
     """
     # Validate --config
+    # 验证 --config 参数
     if args.config:
         for config_path in args.config:
             if not os.path.exists(config_path):
                 raise ValueError(f"Config file does not exist: {config_path}")
     
     # Validate --save_performance_results directory
+    # 验证 --save_performance_results 目录
     if args.save_performance_results:
         save_performance_dir = os.path.dirname(args.save_performance_results)
         if save_performance_dir and not os.path.exists(save_performance_dir):
@@ -25,13 +30,17 @@ def validate_args(args):
 def parse_and_validate_console_args(cli_args=None):
     """
     Parses and validates console arguments.
+    解析并验证控制台参数。
 
     Args:
         cli_args: Optional CLI arguments for testing.
+        cli_args: 用于测试的可选命令行参数。
     Returns:
         argparse.Namespace: Parsed and validated arguments.
+        argparse.Namespace: 已解析和验证的参数。
     Raises:
         RuntimeError: If argument parsing or validation fails.
+        RuntimeError: 如果参数解析或验证失败。
     """
     try:
         parser = argparse.ArgumentParser(
@@ -49,7 +58,7 @@ def parse_and_validate_console_args(cli_args=None):
             nargs='+', 
             required=True, 
             metavar='CONFIG', 
-            help='Path(s) to the configuration file(s) containing strategy details.'
+            help='Path(s) to the configuration file(s) containing strategy details.'  # 包含策略详情的配置文件路径
         )
 
         optional_args = parser.add_argument_group("Optional Arguments")
@@ -57,17 +66,17 @@ def parse_and_validate_console_args(cli_args=None):
             '--save_performance_results', 
             type=str, 
             metavar='FILE', 
-            help='Path to save simulation results (e.g., results.json).'
+            help='Path to save simulation results (e.g., results.json).'  # 保存模拟结果的路径（例如：results.json）
         )
         optional_args.add_argument(
             '--no-plot', 
             action='store_true', 
-            help='Disable the display of plots at the end of the simulation.'
+            help='Disable the display of plots at the end of the simulation.'  # 禁用模拟结束时的图表显示
         )
         optional_args.add_argument(
             '--profile', 
             action='store_true', 
-            help='Enable profiling for performance analysis.'
+            help='Enable profiling for performance analysis.'  # 启用性能分析的性能剖析
         )
 
         args = parser.parse_args(cli_args)

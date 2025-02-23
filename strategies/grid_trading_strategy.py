@@ -15,6 +15,7 @@ from strategies.plotter import Plotter
 
 class GridTradingStrategy(TradingStrategyInterface):
     TICKER_REFRESH_INTERVAL = 3  # in seconds
+                                 # 以秒为单位
 
     def __init__(
         self,
@@ -47,6 +48,9 @@ class GridTradingStrategy(TradingStrategyInterface):
         """
         Initializes historical market data (OHLCV).
         In LIVE or PAPER_TRADING mode returns None.
+        
+        初始化历史市场数据（开高低收成交量）。
+        在实盘或模拟交易模式下返回None。
         """
         if self.trading_mode != TradingMode.BACKTEST:
             return None
@@ -64,6 +68,11 @@ class GridTradingStrategy(TradingStrategyInterface):
 
         Returns:
             tuple: A tuple containing the timeframe, start date, and end date as strings.
+        
+        提取时间周期、开始日期和结束日期的配置值。
+
+        返回：
+            tuple：包含时间周期、开始日期和结束日期的字符串元组。
         """
         timeframe = self.config_manager.get_timeframe()
         start_date = self.config_manager.get_start_date()
@@ -74,6 +83,9 @@ class GridTradingStrategy(TradingStrategyInterface):
         """
         Initializes the trading strategy by setting up the grid and levels.
         This method prepares the strategy to be ready for trading.
+        
+        通过设置网格和价格层级来初始化交易策略。
+        此方法为交易做好准备。
         """
         self.grid_manager.initialize_grids_and_levels()
     
@@ -84,6 +96,11 @@ class GridTradingStrategy(TradingStrategyInterface):
         This method halts all trading activities, closes active exchange 
         connections, and updates the internal state to indicate the bot 
         is no longer running.
+        
+        停止交易执行。
+
+        此方法会停止所有交易活动，关闭活跃的交易所连接，
+        并更新内部状态以表明机器人不再运行。
         """
         self._running = False
         await self.exchange_service.close_connection()
@@ -92,6 +109,8 @@ class GridTradingStrategy(TradingStrategyInterface):
     async def restart(self):
         """
         Restarts the trading session. If the strategy is not running, starts it.
+        
+        重启交易会话。如果策略未运行，则启动它。
         """
         if not self._running:
             self.logger.info("Restarting trading session.")
@@ -107,6 +126,14 @@ class GridTradingStrategy(TradingStrategyInterface):
 
         Raises:
             Exception: If any error occurs during the trading session.
+        
+        根据配置的模式启动交易会话。
+
+        对于回测，使用历史数据模拟策略。
+        对于实盘或模拟交易，与交易所交互以管理实时交易。
+
+        异常：
+            Exception：交易会话期间发生任何错误时抛出。
         """
         self._running = True        
         trigger_price = self.grid_manager.get_trigger_price()
@@ -127,6 +154,14 @@ class GridTradingStrategy(TradingStrategyInterface):
 
         Args:
             trigger_price (float): The price at which grid orders are triggered.
+        
+        基于实时行情更新执行实盘或模拟交易会话。
+
+        该方法监听行情更新，在达到触发价格时初始化网格订单，
+        并管理止盈和止损事件。
+
+        参数：
+            trigger_price (float)：触发网格订单的价格。
         """
         self.logger.info(f"Starting {'live' if self.trading_mode == TradingMode.LIVE else 'paper'} trading")
         last_price: Optional[float] = None
@@ -183,6 +218,14 @@ class GridTradingStrategy(TradingStrategyInterface):
 
         Args:
             trigger_price (float): The price at which grid orders are triggered.
+        
+        基于历史OHLCV数据执行回测模拟。
+
+        此方法使用预加载的数据进行交易模拟，管理网格层级，
+        执行订单，并在时间范围内更新账户价值。
+
+        参数：
+            trigger_price (float)：触发网格订单的价格。
         """
         if self.data is None:
             self.logger.error("No data available for backtesting.")
@@ -258,6 +301,13 @@ class GridTradingStrategy(TradingStrategyInterface):
 
         Returns:
             tuple: A dictionary summarizing performance metrics and a list of formatted order details.
+        
+        生成交易会话的性能报告。
+
+        通过分析给定时间范围内的账户价值、费用和最终价格来评估策略的表现。
+
+        返回：
+            tuple：包含性能指标摘要的字典和格式化订单详情的列表。
         """
         if self.trading_mode == TradingMode.BACKTEST:
             initial_price = self.close_prices[0]
@@ -296,6 +346,11 @@ class GridTradingStrategy(TradingStrategyInterface):
         This method generates and displays visualizations of the trading 
         strategy's performance during backtesting. If the bot is running
         in live or paper trading mode, plotting is not available.
+        
+        使用提供的绘图器绘制回测结果。
+
+        此方法生成并显示回测期间交易策略表现的可视化图表。
+        如果机器人在实盘或模拟交易模式下运行，则不提供绘图功能。
         """
         if self.trading_mode == TradingMode.BACKTEST:
             self.plotter.plot_results(self.data)
@@ -304,8 +359,11 @@ class GridTradingStrategy(TradingStrategyInterface):
     
     async def _handle_take_profit_stop_loss(self, current_price: float) -> bool:
         """
-        Handles take-profit or stop-loss events based on the current price.
-        Publishes a STOP_BOT event if either condition is triggered.
+        Handles take-profit or stop-loss events based on current price.
+        Publishes STOP_BOT event if either condition is triggered.
+
+        根据当前价格处理止盈或止损事件。
+        如果触发任一条件，则发布STOP_BOT事件。
         """
         tp_or_sl_triggered = await self._evaluate_tp_or_sl(current_price)
         if tp_or_sl_triggered:
@@ -315,9 +373,18 @@ class GridTradingStrategy(TradingStrategyInterface):
         return False
 
     async def _evaluate_tp_or_sl(self, current_price: float) -> bool:
-        """
-        Evaluates whether take-profit or stop-loss conditions are met.
-        Returns True if any condition is triggered.
+        """评估止盈止损条件
+
+        该方法检查当前价格是否触发止盈或止损条件：
+        1. 检查加密货币余额
+        2. 评估止盈条件
+        3. 评估止损条件
+
+        参数:
+            current_price: float - 当前市场价格
+
+        返回:
+            bool: 如果触发了任一条件返回True，否则返回False
         """
         if self.balance_tracker.crypto_balance == 0:
             self.logger.debug("No crypto balance available; skipping TP/SL checks.")
@@ -330,9 +397,18 @@ class GridTradingStrategy(TradingStrategyInterface):
         return False
 
     async def _handle_take_profit(self, current_price: float) -> bool:
-        """
-        Handles take-profit logic and executes a TP order if conditions are met.
-        Returns True if take-profit is triggered.
+        """处理止盈逻辑
+
+        该方法实现止盈功能：
+        1. 检查止盈功能是否启用
+        2. 比较当前价格与止盈阈值
+        3. 触发止盈时执行市价卖单
+
+        参数:
+            current_price: float - 当前市场价格
+
+        返回:
+            bool: 是否触发了止盈操作
         """
         if self.config_manager.is_take_profit_enabled() and current_price >= self.config_manager.get_take_profit_threshold():
             self.logger.info(f"Take-profit triggered at {current_price}. Executing TP order...")
@@ -341,9 +417,18 @@ class GridTradingStrategy(TradingStrategyInterface):
         return False
 
     async def _handle_stop_loss(self, current_price: float) -> bool:
-        """
-        Handles stop-loss logic and executes an SL order if conditions are met.
-        Returns True if stop-loss is triggered.
+        """处理止损逻辑
+
+        该方法实现止损功能：
+        1. 检查止损功能是否启用
+        2. 比较当前价格与止损阈值
+        3. 触发止损时执行市价卖单
+
+        参数:
+            current_price: float - 当前市场价格
+
+        返回:
+            bool: 是否触发了止损操作
         """
         if self.config_manager.is_stop_loss_enabled() and current_price <= self.config_manager.get_stop_loss_threshold():
             self.logger.info(f"Stop-loss triggered at {current_price}. Executing SL order...")
@@ -352,10 +437,16 @@ class GridTradingStrategy(TradingStrategyInterface):
         return False
     
     def get_formatted_orders(self):
-        """
-        Retrieves a formatted summary of all orders.
+        """获取格式化的订单记录
 
-        Returns:
-            list: A list of formatted orders.
+        该方法返回所有订单的格式化摘要：
+        1. 订单类型(买入/卖出)
+        2. 价格和数量
+        3. 执行时间
+        4. 订单状态
+        5. 网格层级信息
+
+        返回:
+            list: 包含所有订单详细信息的列表
         """
         return self.trading_performance_analyzer.get_formatted_orders()

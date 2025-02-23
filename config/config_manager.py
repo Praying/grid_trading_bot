@@ -40,7 +40,9 @@ class ConfigManager:
     def get_trading_fee(self):
         exchange = self.get_exchange()
         return exchange.get('trading_fee', 0)
-    
+
+    def get_instrument_type(self) ->str:
+        return self.config.get('instrument_type', 'spot')
     def get_trading_mode(self) -> Optional[TradingMode]:
         exchange = self.get_exchange()
         trading_mode = exchange.get('trading_mode', None)

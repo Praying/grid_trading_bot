@@ -15,7 +15,7 @@ from core.bot_management.notification.notification_content import NotificationTy
 from strategies.strategy_type import StrategyType
 from config.trading_mode import TradingMode
 from .exceptions import OrderExecutionFailedError
-
+"""订单管理中心，协调网格策略执行、风险控制与交易所交互"""
 class OrderManager:
     def __init__(
         self, 
@@ -30,17 +30,33 @@ class OrderManager:
         trading_pair: str,
         strategy_type: StrategyType
     ):
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.grid_manager = grid_manager
-        self.order_validator = order_validator
-        self.balance_tracker = balance_tracker
-        self.order_book = order_book
-        self.event_bus = event_bus
-        self.order_execution_strategy = order_execution_strategy
-        self.notification_handler = notification_handler
-        self.trading_mode: TradingMode = trading_mode
-        self.trading_pair = trading_pair
-        self.strategy_type: StrategyType = strategy_type
+        """
+        初始化订单管理器
+
+        参数:
+            grid_manager: 网格策略管理器实例
+            order_validator: 订单参数验证器（保证交易合法性）
+            balance_tracker: 资产余额追踪器
+            order_book: 订单簿实例
+            event_bus: 事件总线（用于发布/订阅系统事件）
+            order_execution_strategy: 订单执行策略接口（对接交易所）
+            notification_handler: 通知处理器（用于发送报警/通知）
+            trading_mode: 交易模式（实盘/回测）
+            trading_pair: 交易对（如BTC/USDT）
+            strategy_type: 策略类型（网格/马丁等）
+        """
+        self.logger = logging.getLogger(self.__class__.__name__)# 核心依赖组件注入
+        self.grid_manager = grid_manager# 网格策略引擎
+        self.order_validator = order_validator# 订单验证模块
+        self.balance_tracker = balance_tracker# 资产监控模块
+        self.order_book = order_book# 订单存储中心
+        self.event_bus = event_bus# 事件驱动总线
+        self.order_execution_strategy = order_execution_strategy# 交易所适配器
+        self.notification_handler = notification_handler# 通知中心
+        self.trading_mode: TradingMode = trading_mode# 运行模式（实盘/回测）
+        self.trading_pair = trading_pair# 交易标的
+        self.strategy_type: StrategyType = strategy_type# 策略类型
+        # 订阅订单状态变更事件
         self.event_bus.subscribe(Events.ORDER_FILLED, self._on_order_filled)
         self.event_bus.subscribe(Events.ORDER_CANCELLED, self._on_order_cancelled)
     
@@ -51,23 +67,26 @@ class OrderManager:
         """
         Places initial buy orders for grid levels below the current price.
         """
+        # 初始化买单（仅挂低于当前价的网格）
         for price in self.grid_manager.sorted_buy_grids:
             if price >= current_price:
                 self.logger.info(f"Skipping grid level at price: {price} for BUY order: Above current price.")
-                continue
-
+                continue# 跳过高于当前价的网格
+            # 获取网格层级对象
             grid_level = self.grid_manager.grid_levels[price]
+            # 计算订单规模（基于总资产价值）
             total_balance_value = self.balance_tracker.get_total_balance_value(current_price)
             order_quantity = self.grid_manager.get_order_size_for_grid_level(total_balance_value, current_price)
 
             if self.grid_manager.can_place_order(grid_level, OrderSide.BUY):
                 try:
+                    # 资金验证与数量调整
                     adjusted_buy_order_quantity = self.order_validator.adjust_and_validate_buy_quantity(
                         balance=self.balance_tracker.balance,
                         order_quantity=order_quantity,
                         price=price
                     )
-
+                    # 执行限价买单
                     self.logger.info(f"Placing initial buy limit order at grid level {price} for {adjusted_buy_order_quantity} {self.trading_pair}.")
                     order = await self.order_execution_strategy.execute_limit_order(
                         OrderSide.BUY, 
@@ -79,9 +98,11 @@ class OrderManager:
                     if order is None:
                         self.logger.error(f"Failed to place buy order at {price}: No order returned.")
                         continue
-
+                    # 更新资金冻结状态
                     self.balance_tracker.reserve_funds_for_buy(adjusted_buy_order_quantity * price)
+                    # 更新网格状态
                     self.grid_manager.mark_order_pending(grid_level, order)
+                    # 记录订单到订单簿
                     self.order_book.add_order(order, grid_level)
 
                 except OrderExecutionFailedError as e:
@@ -151,14 +172,14 @@ class OrderManager:
     ) -> None:
         """
         Handles filled orders and places paired orders as needed.
-
+        订单成交事件处理（触发对冲单挂单）
         Args:
             order: The filled Order instance.
         """
         try:
             grid_level = self.order_book.get_grid_level_for_order(order)
 
-            if not grid_level:
+            if not grid_level:# 非网格订单不处理
                 self.logger.warning(f"Could not handle Order completion - No grid level found for the given filled order {order}")
                 return
 
@@ -184,6 +205,7 @@ class OrderManager:
             order: The filled Order instance.
             grid_level: The grid level associated with the filled order.
         """
+        # 根据买卖方向处理成交
         if order.side == OrderSide.BUY:
             await self._handle_buy_order_completion(order, grid_level)
 
@@ -203,10 +225,13 @@ class OrderManager:
             grid_level: The grid level associated with the completed buy order.
         """
         self.logger.info(f"Buy order completed at grid level {grid_level}.")
+        # 标记网格层级完成状态
         self.grid_manager.complete_order(grid_level, OrderSide.BUY)
+        # 获取配对卖单层级
         paired_sell_level = self.grid_manager.get_paired_sell_level(grid_level)
 
         if paired_sell_level and self.grid_manager.can_place_order(paired_sell_level, OrderSide.SELL):
+            # 挂对冲卖单
             await self._place_sell_order(grid_level, paired_sell_level, order.filled)
         else:
             self.logger.warning(f"No valid sell grid level found for buy grid level {grid_level}. Skipping sell order placement.")
@@ -224,10 +249,13 @@ class OrderManager:
             grid_level: The grid level associated with the completed sell order.
         """
         self.logger.info(f"Sell order completed at grid level {grid_level}.")
+        # 标记网格层级完成状态
         self.grid_manager.complete_order(grid_level, OrderSide.SELL)
+        # 获取配对买单层级
         paired_buy_level = self._get_or_create_paired_buy_level(grid_level)
 
         if paired_buy_level:
+            # 挂对冲买单
             await self._place_buy_order(grid_level, paired_buy_level, order.filled)
         else:
             self.logger.error(f"Failed to find or create a paired buy grid level for grid level {grid_level}.")
@@ -300,7 +328,9 @@ class OrderManager:
             grid_level: The grid level to place the sell order on.
             quantity: The quantity of the sell order.
         """
+        # 数量验证与调整
         adjusted_quantity = self.order_validator.adjust_and_validate_sell_quantity(self.balance_tracker.crypto_balance, quantity)
+        # 执行限价卖单
         sell_order = await self.order_execution_strategy.execute_limit_order(
             OrderSide.SELL, 
             self.trading_pair, 
@@ -309,8 +339,11 @@ class OrderManager:
         )
 
         if sell_order:
+            # 建立网格层级配对关系
             self.grid_manager.pair_grid_levels(buy_grid_level, sell_grid_level, pairing_type="sell")
+            # 冻结加密货币余额
             self.balance_tracker.reserve_funds_for_sell(sell_order.amount)
+            # 更新订单簿与网格状态
             self.grid_manager.mark_order_pending(sell_grid_level, sell_order)
             self.order_book.add_order(sell_order, sell_grid_level)
             await self.notification_handler.async_send_notification(NotificationType.ORDER_PLACED, order_details=str(sell_order))  
@@ -323,10 +356,11 @@ class OrderManager:
     ) -> None:
         """
         Handles the initial crypto purchase for grid trading strategy if required.
-
+        执行初始建仓（网格策略可能需要基础仓位）
         Args:
             current_price: The current price of the trading pair.
         """
+        # 计算初始买入量
         initial_quantity = self.grid_manager.get_initial_order_quantity(
             current_fiat_balance=self.balance_tracker.balance,
             current_crypto_balance=self.balance_tracker.crypto_balance,
@@ -339,7 +373,7 @@ class OrderManager:
 
         self.logger.info(f"Performing initial crypto purchase: {initial_quantity} at price {current_price}.")
 
-        try:
+        try:            # 执行市价单建仓
             buy_order = await self.order_execution_strategy.execute_market_order(
                 OrderSide.BUY, 
                 self.trading_pair, 
@@ -388,9 +422,10 @@ class OrderManager:
 
         event = "Take profit" if take_profit_order else "Stop loss"
         try:
+            # 获取当前加密货币持仓
             quantity = self.balance_tracker.crypto_balance
+            # 执行市价卖单
             order = await self.order_execution_strategy.execute_market_order(OrderSide.SELL, self.trading_pair, quantity, current_price)
-
             if not order:
                 self.logger.error(f"Order execution failed: {order}")
                 raise Exception
