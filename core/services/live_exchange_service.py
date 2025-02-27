@@ -8,6 +8,9 @@ from .exchange_interface import ExchangeInterface
 from .exceptions import UnsupportedExchangeError, DataFetchError, OrderCancellationError, MissingEnvironmentVariableError
 
 class LiveExchangeService(ExchangeInterface):
+    async def get_margin_ratio(self) -> float:
+        pass
+
     def __init__(
         self, 
         config_manager: ConfigManager, 

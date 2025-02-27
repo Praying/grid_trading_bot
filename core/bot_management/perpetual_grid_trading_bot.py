@@ -2,7 +2,7 @@ import logging, traceback
 from typing import Optional, Dict, Any
 from core.services.exchange_service_factory import ExchangeServiceFactory
 from strategies.strategy_type import StrategyType
-from strategies.grid_trading_strategy import GridTradingStrategy
+from strategies.perpetual_grid_trading_strategy import PerpetualGridTradingStrategy
 from strategies.plotter import Plotter
 from strategies.trading_performance_analyzer import TradingPerformanceAnalyzer
 from core.order_handling.perpetual_order_manager import PerpetualOrderManager
@@ -124,7 +124,7 @@ class PerpetualGridTradingBot:
             plotter = Plotter(grid_manager, order_book) if self.trading_mode == TradingMode.BACKTEST else None
             
             # 初始化网格交易策略
-            self.strategy = GridTradingStrategy(
+            self.strategy = PerpetualGridTradingStrategy(
                 self.config_manager,
                 self.event_bus,
                 self.exchange_service,
@@ -312,8 +312,7 @@ class PerpetualGridTradingBot:
             如果保证金安全返回True，否则返回False
         """
         try:
-            margin_info = await self.balance_tracker.get_margin_info()
-            margin_ratio = margin_info.get("margin_ratio", 0)
+            margin_ratio = await self.exchange_service.get_margin_ratio()
             liquidation_threshold = self.config_manager.get_liquidation_threshold()
             
             if margin_ratio <= liquidation_threshold:

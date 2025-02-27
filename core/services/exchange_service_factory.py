@@ -13,7 +13,10 @@ class ExchangeServiceFactory:
         if trading_mode == TradingMode.BACKTEST:
             return BacktestExchangeService(config_manager)
         elif trading_mode == TradingMode.PAPER_TRADING:
-            return LiveExchangeService(config_manager, is_paper_trading_activated=True)
+            if config_manager.get_instrument_type() == "perpetual":
+                return PerpetualExchangeService(config_manager, is_paper_trading_activated=True)
+            else:
+                return LiveExchangeService(config_manager, is_paper_trading_activated=True)
         elif trading_mode == TradingMode.LIVE:
             if config_manager.get_instrument_type() == "perpetual":
                 return PerpetualExchangeService(config_manager, is_paper_trading_activated=False)

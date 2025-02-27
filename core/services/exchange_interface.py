@@ -60,3 +60,13 @@ class ExchangeInterface(ABC):
     async def close_connection(self) -> None:
         """Close current exchange connection."""
         pass
+
+    @abstractmethod
+    async def get_margin_ratio(self) -> float:
+        """Fetches margin ratio"""
+        pass
+
+    @abstractmethod
+    async def get_positions(self, pair: Optional[str] = None) -> Dict[str, Any]:
+        """Fetches positions"""
+        pass

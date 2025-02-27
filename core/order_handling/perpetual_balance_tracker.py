@@ -64,7 +64,7 @@ class PerpetualBalanceTracker:
     async def setup_balances(
         self, 
         initial_margin: float,
-        exchange_service=ExchangeInterface
+        exchange_service: ExchangeInterface
     ):
         """
         根据交易模式设置初始保证金余额。
@@ -94,7 +94,25 @@ class PerpetualBalanceTracker:
         返回:
             dict: 包含保证金余额、持仓信息等的字典。
         """
-        balances = await exchange_service.get_perpetual_balance()
+        balances = await exchange_service.get_balance()
+        usdt_balance = balances['free'].get('USDT', 0.0)  # 如果没有USDT键，默认值为0.0
+        if not usdt_balance:
+            self.margin_balance = 0.0
+        else:
+            self.margin_balance = float(usdt_balance)
+        symbol = self.base_currency + '/' + self.quote_currency
+        positions = await exchange_service.get_positions(symbol)
+        # 查找当前交易对的持仓
+        for pos in positions:
+            if pos['symbol'] == self.base_currency + '/' + self.quote_currency:
+                self.position_size = abs(float(pos['contracts']))
+                self.unrealized_pnl = float(pos['unrealizedPnl'])
+                self.initial_margin = float(pos['initialMargin'])
+                self.maintenance_margin = float(pos['maintenanceMargin'])
+                break
+
+        self.logger.info(f"合约账户余额 - 可用保证金: {self.margin_balance}, 持仓量: {self.position_size}")
+
         if not balances:
             raise ValueError("Failed to fetch perpetual balance information")
         return balances
@@ -155,6 +173,9 @@ class PerpetualBalanceTracker:
             float: 总保证金余额。
         """
         return self.margin_balance + self.unrealized_pnl
+
+    def fetch_margin_ratio(self, exchange: ExchangeInterface) -> float:
+        pass
 
     def get_margin_ratio(self, current_price: float) -> float:
         """

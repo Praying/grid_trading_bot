@@ -8,6 +8,32 @@ from .exchange_interface import ExchangeInterface
 from .exceptions import UnsupportedExchangeError, DataFetchError, OrderCancellationError, MissingEnvironmentVariableError
 
 class PerpetualExchangeService(ExchangeInterface):
+    async def get_margin_ratio(self) -> float:
+        if self.exchange_name == 'okx':
+            # 获取账户风险信息
+            try:
+                # 获取 U 本位永续合约仓位信息
+                positions = await self.exchange.fetch_positions()
+                for position in positions['data']:
+                    if position['instType'] == 'SWAP' and position['currency'] == 'USDT':
+                        # 查找U本位永续合约仓位信息
+                        print(f"Symbol: {position['instId']}")
+                        print(f"Position: {position['pos']}")
+                        print(f"Leverage: {position['leverage']}")
+                        print(f"Margin: {position['margin']}")
+                        print(f"Risk: {position['risk']}")  # 包含强平风险的信息
+                        print(f"Liquidation Price: {position['liqPx']}")  # 强平价格
+                        return float(position['margin'])
+            except Exception as e:
+                print(f"Error: {e}")
+        elif self.exchange_name == 'binance':
+            try:
+                balance = await self.exchange.fetch_balance()
+                margin_ratio = balance['info']['marginRatio']
+                return float(margin_ratio)
+            except BaseError as e:
+                raise DataFetchError(f"Error fetching margin ratio: {str(e)}")
+
     def __init__(
         self, 
         config_manager: ConfigManager, 
@@ -36,13 +62,14 @@ class PerpetualExchangeService(ExchangeInterface):
                 'secret': self.secret_key,
                 'password': self.password,
                 'enableRateLimit': True,
+                'testnet': True,
                 'options': {
-                    'defaultType': 'future'  # 设置为永续合约模式
+                    'defaultType': 'swap',  # 设置为永续合约模式
                 }
             })
-
+            # 打开模拟交易模式（确保使用OKX模拟盘接口）
             if self.is_paper_trading_activated:
-                self._enable_sandbox_mode(exchange)
+                exchange.set_sandbox_mode(True)
             return exchange
         except AttributeError:
             raise UnsupportedExchangeError(f"The exchange '{self.exchange_name}' is not supported.")
@@ -122,7 +149,7 @@ class PerpetualExchangeService(ExchangeInterface):
 
     async def get_balance(self) -> Dict[str, Any]:
         try:
-            balance = await self.exchange.fetch_balance({'type': 'future'})
+            balance = await self.exchange.fetch_balance({'type': 'swap'})
             return balance
 
         except BaseError as e:

@@ -3,7 +3,7 @@
   "exchange": {
     "name": "okx",
     "trading_fee": 0.001, 
-    "trading_mode": "live"
+    "trading_mode": "paper_trading"
   },
   "pair": {
     "base_currency": "BNB",
