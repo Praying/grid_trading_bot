@@ -161,3 +161,6 @@ class ConfigManager:
     def should_log_to_file(self) -> bool:
         logging = self.get_logging()
         return logging.get('log_to_file', False)
+
+    def get_liquidation_threshold(self):
+        pass

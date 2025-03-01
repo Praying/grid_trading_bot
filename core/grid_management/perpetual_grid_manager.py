@@ -321,3 +321,6 @@ class PerpetualGridManager:
 
         else:
             self.logger.error("未知的策略类型")
+
+    def get_trigger_price(self) -> float:
+        return self.central_price

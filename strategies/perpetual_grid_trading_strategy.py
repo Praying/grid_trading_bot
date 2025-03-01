@@ -2,6 +2,8 @@ import logging
 from typing import Optional, Tuple
 import pandas as pd
 import numpy as np
+
+from .perpetual_trading_performance_analyzer import PerpetualTradingPerformanceAnalyzer
 from .trading_strategy_interface import TradingStrategyInterface
 from config.trading_mode import TradingMode
 from core.bot_management.event_bus import EventBus, Events
@@ -22,7 +24,7 @@ class PerpetualGridTradingStrategy(TradingStrategyInterface):
         grid_manager: PerpetualGridManager,
         order_manager: PerpetualOrderManager,
         balance_tracker: PerpetualBalanceTracker,
-        trading_performance_analyzer: TradingPerformanceAnalyzer,
+        trading_performance_analyzer: PerpetualTradingPerformanceAnalyzer,
         trading_mode: TradingMode,
         trading_pair: str,
         plotter: Optional[Plotter] = None

@@ -3,6 +3,8 @@ from typing import Optional
 from core.bot_management.event_bus import EventBus, Events
 from core.order_handling.order_book import OrderBook
 from core.order_handling.order import Order, OrderStatus
+from core.order_handling.perpetual_order_book import PerpetualOrderBook
+
 
 class PerpetualOrderStatus:
     """永续合约特有的订单状态"""
@@ -22,7 +24,7 @@ class PerpetualOrderStatusTracker:
 
     def __init__(
         self,
-        order_book: OrderBook,
+        order_book: PerpetualOrderBook,
         order_execution_strategy,
         event_bus: EventBus,
         polling_interval: float = 5.0,  # 合约默认使用更短的轮询间隔

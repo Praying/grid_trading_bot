@@ -1,6 +1,8 @@
 import logging, traceback
 from typing import Optional, Dict, Any
 from core.services.exchange_service_factory import ExchangeServiceFactory
+from strategies.perpetual_plotter import PerpetualPlotter
+from strategies.perpetual_trading_performance_analyzer import PerpetualTradingPerformanceAnalyzer
 from strategies.strategy_type import StrategyType
 from strategies.perpetual_grid_trading_strategy import PerpetualGridTradingStrategy
 from strategies.plotter import Plotter
@@ -17,7 +19,9 @@ from core.order_handling.execution_strategy.order_execution_strategy_factory imp
 from core.services.exceptions import UnsupportedExchangeError, DataFetchError, UnsupportedTimeframeError
 from config.config_manager import ConfigManager
 from config.trading_mode import TradingMode
+from .notification.notification_content import NotificationType
 from .notification.notification_handler import NotificationHandler
+from ..order_handling.perpetual_order_status_tracker import PerpetualOrderStatusTracker
 
 """永续合约U本位网格交易机器人核心实现
 
@@ -101,7 +105,7 @@ class PerpetualGridTradingBot:
             
             # 创建永续合约订单簿和订单状态追踪器
             order_book = PerpetualOrderBook()
-            self.order_status_tracker = OrderStatusTracker(
+            self.order_status_tracker = PerpetualOrderStatusTracker(
                 order_book=order_book,
                 order_execution_strategy=order_execution_strategy,
                 event_bus=self.event_bus,
@@ -120,8 +124,8 @@ class PerpetualGridTradingBot:
             )
             
             # 创建交易性能分析器和图表绘制器
-            trading_performance_analyzer = TradingPerformanceAnalyzer(self.config_manager, order_book)
-            plotter = Plotter(grid_manager, order_book) if self.trading_mode == TradingMode.BACKTEST else None
+            trading_performance_analyzer = PerpetualTradingPerformanceAnalyzer(self.config_manager, order_book)
+            plotter = PerpetualPlotter(grid_manager, order_book) if self.trading_mode == TradingMode.BACKTEST else None
             
             # 初始化网格交易策略
             self.strategy = PerpetualGridTradingStrategy(
