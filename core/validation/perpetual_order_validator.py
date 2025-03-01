@@ -81,8 +81,28 @@ class PerpetualOrderValidator:
             InvalidContractQuantityError: 如果调整后的数量无效。
             MarginRatioError: 如果开仓后保证金率低于维持保证金率。
         """
-        # 开空仓的逻辑与开多仓类似
-        return self.adjust_and_validate_open_long(margin_balance, order_quantity, price, leverage)
+        required_margin = (order_quantity * price) / leverage
+        # 如果保证金余额远低于所需保证金，提前抛出错误
+        if margin_balance < required_margin * self.threshold_ratio:
+            raise InsufficientMarginError(
+                f"Margin balance {margin_balance:.2f} is far below the required margin {required_margin:.2f} "
+                f"(threshold ratio: {self.threshold_ratio})."
+            )
+
+        # 如果保证金不足，调整数量
+        if required_margin > margin_balance:
+            adjusted_quantity = max((margin_balance - self.tolerance) * leverage / price, 0)
+            # 如果调整后的数量为 0 或保证金小于容忍度，抛出错误
+            if adjusted_quantity <= 0 or (adjusted_quantity * price / leverage) < self.tolerance:
+                raise InsufficientMarginError(
+                    f"Insufficient margin: {margin_balance:.2f} to open short position at price {price:.2f}."
+                )
+        else:
+            adjusted_quantity = order_quantity
+
+        self._validate_contract_quantity(adjusted_quantity)
+        self._check_margin_ratio(margin_balance, adjusted_quantity, price, leverage)
+        return adjusted_quantity
 
     def adjust_and_validate_close_long(self, long_position: float, order_quantity: float) -> float:
         """
@@ -139,7 +159,11 @@ class PerpetualOrderValidator:
         抛出:
             InvalidContractQuantityError: 如果数量小于等于0或小于最小合约张数。
         """
-        if quantity <= 0 or quantity < self.min_contract_size:
+        if quantity <= 0:
+            raise InvalidContractQuantityError(
+                f"Invalid contract quantity: {quantity:.6f}, must be greater than zero"
+            )
+        if quantity < self.min_contract_size:
             raise InvalidContractQuantityError(
                 f"Invalid contract quantity: {quantity:.6f}, minimum contract size: {self.min_contract_size}"
             )
@@ -159,7 +183,8 @@ class PerpetualOrderValidator:
             MarginRatioError: 如果开仓后保证金率低于维持保证金率。
         """
         position_value = order_quantity * price
-        margin_ratio = margin_balance / position_value
+        # 考虑杠杆因素计算实际保证金率
+        margin_ratio = margin_balance / (position_value / leverage)
 
         if margin_ratio < self.maintenance_margin_rate:
             raise MarginRatioError(

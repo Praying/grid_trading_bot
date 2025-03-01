@@ -55,14 +55,13 @@ class PerpetualExchangeService(ExchangeInterface):
             raise MissingEnvironmentVariableError(f"Missing required environment variable: {key}")
         return value
 
-    def _initialize_exchange(self) -> None:
+    def _initialize_exchange(self) -> ccxtpro.Exchange:
         try:
             exchange = getattr(ccxtpro, self.exchange_name)({
                 'apiKey': self.api_key,
                 'secret': self.secret_key,
                 'password': self.password,
                 'enableRateLimit': True,
-                'testnet': True,
                 'options': {
                     'defaultType': 'swap',  # 设置为永续合约模式
                 }

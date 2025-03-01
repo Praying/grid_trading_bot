@@ -94,28 +94,46 @@ class PerpetualBalanceTracker:
         返回:
             dict: 包含保证金余额、持仓信息等的字典。
         """
+        result = {
+            'margin_balance': 0.0,
+            'long_position': 0.0,
+            'short_position': 0.0,
+            'long_avg_price': 0.0,
+            'short_avg_price': 0.0,
+            'unrealized_pnl': 0.0
+        }
+        
+        # 获取余额信息
         balances = await exchange_service.get_balance()
-        usdt_balance = balances['free'].get('USDT', 0.0)  # 如果没有USDT键，默认值为0.0
-        if not usdt_balance:
-            self.margin_balance = 0.0
-        else:
-            self.margin_balance = float(usdt_balance)
-        symbol = self.base_currency + '/' + self.quote_currency
-        positions = await exchange_service.get_positions(symbol)
-        # 查找当前交易对的持仓
-        for pos in positions:
-            if pos['symbol'] == self.base_currency + '/' + self.quote_currency:
-                self.position_size = abs(float(pos['contracts']))
-                self.unrealized_pnl = float(pos['unrealizedPnl'])
-                self.initial_margin = float(pos['initialMargin'])
-                self.maintenance_margin = float(pos['maintenanceMargin'])
-                break
-
-        self.logger.info(f"合约账户余额 - 可用保证金: {self.margin_balance}, 持仓量: {self.position_size}")
-
         if not balances:
             raise ValueError("Failed to fetch perpetual balance information")
-        return balances
+            
+        # 获取保证金余额
+        usdt_balance = balances['free'].get('USDT', 0.0)  # 如果没有USDT键，默认值为0.0
+        result['margin_balance'] = float(usdt_balance)
+        
+        # 获取持仓信息
+        symbol = self.base_currency + '/' + self.quote_currency
+        positions = await exchange_service.get_positions(symbol)
+        position_size = 0.0
+        
+        # 查找当前交易对的持仓
+        for pos in positions:
+            if pos['symbol'] == symbol:
+                position_size = abs(float(pos.get('contracts', 0)))
+                result['unrealized_pnl'] = float(pos.get('unrealizedPnl', 0))
+                
+                # 判断多空方向并设置相应的持仓信息
+                if pos.get('side') == 'long' or float(pos.get('contracts', 0)) > 0:
+                    result['long_position'] = position_size
+                    result['long_avg_price'] = float(pos.get('entryPrice', 0))
+                elif pos.get('side') == 'short' or float(pos.get('contracts', 0)) < 0:
+                    result['short_position'] = position_size
+                    result['short_avg_price'] = float(pos.get('entryPrice', 0))
+                break
+
+        self.logger.info(f"合约账户余额 - 可用保证金: {result['margin_balance']}, 持仓量: {position_size}")
+        return result
 
     def _calculate_required_margin(self, quantity: float, price: float) -> float:
         """
