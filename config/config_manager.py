@@ -163,4 +163,5 @@ class ConfigManager:
         return logging.get('log_to_file', False)
 
     def get_liquidation_threshold(self):
-        pass
+        # 维持保证保证金率低于300% 触发预警
+        return float(3.0)

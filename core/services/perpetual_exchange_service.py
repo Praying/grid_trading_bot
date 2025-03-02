@@ -13,17 +13,20 @@ class PerpetualExchangeService(ExchangeInterface):
             # 获取账户风险信息
             try:
                 # 获取 U 本位永续合约仓位信息
-                positions = await self.exchange.fetch_position(self.symbol)
-                for position in positions['data']:
-                    if position['instType'] == 'SWAP' and position['currency'] == 'USDT':
-                        # 查找U本位永续合约仓位信息
-                        print(f"Symbol: {position['instId']}")
-                        print(f"Position: {position['pos']}")
-                        print(f"Leverage: {position['leverage']}")
-                        print(f"Margin: {position['margin']}")
-                        print(f"Risk: {position['risk']}")  # 包含强平风险的信息
-                        print(f"Liquidation Price: {position['liqPx']}")  # 强平价格
-                        return float(position['margin'])
+                position = await self.exchange.fetch_position(self.symbol)
+                if position['info']['instType'] == 'SWAP' and position['info']['ccy'] == 'USDT':
+                    # 查找U本位永续合约仓位信息
+                    self.logger.info(f"Symbol: {position['symbol']}")
+                    self.logger.info(f"持仓合约方向: {position['side']}")
+                    self.logger.info(f"平均入场价格: {position['entryPrice']}")
+                    self.logger.info(f"持仓合约数量: {position['contracts']}")
+                    self.logger.info(f"持仓合约大小: {position['contractSize']}")
+                    self.logger.info(f"持仓合约杠杆: x{position['leverage']}")
+                    self.logger.info(f"保证金模式: {position['marginMode']}")
+                    self.logger.info(f"保证金比率: {position['marginRatio']}")
+                    self.logger.info(f"维持保证金: {position['maintenanceMargin']}")
+                    self.logger.info(f"清算价格: {position['liquidationPrice']}")
+                    return float(position['marginRatio'])
             except Exception as e:
                 print(f"Error: {e}")
         elif self.exchange_name == 'binance':
