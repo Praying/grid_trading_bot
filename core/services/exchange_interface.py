@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Union, Optional, Any
+from typing import Dict, Union, Optional, Any, List
 import pandas as pd
 
 class ExchangeInterface(ABC):
@@ -67,6 +67,6 @@ class ExchangeInterface(ABC):
         pass
 
     @abstractmethod
-    async def get_positions(self, pair: Optional[str] = None) -> Dict[str, Any]:
+    async def get_positions(self, pairs: List[str]):
         """Fetches positions"""
         pass

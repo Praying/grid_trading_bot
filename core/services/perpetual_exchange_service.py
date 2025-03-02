@@ -1,7 +1,7 @@
 import ccxt, logging, asyncio, os
 from ccxt.base.errors import NetworkError, BaseError, ExchangeError, OrderNotFound
 import ccxt.pro as ccxtpro
-from typing import Dict, Union, Callable, Any, Optional
+from typing import Dict, Union, Callable, Any, Optional, List
 import pandas as pd
 from config.config_manager import ConfigManager
 from .exchange_interface import ExchangeInterface
@@ -13,7 +13,7 @@ class PerpetualExchangeService(ExchangeInterface):
             # 获取账户风险信息
             try:
                 # 获取 U 本位永续合约仓位信息
-                positions = await self.exchange.fetch_positions()
+                positions = await self.exchange.fetch_position(self.symbol)
                 for position in positions['data']:
                     if position['instType'] == 'SWAP' and position['currency'] == 'USDT':
                         # 查找U本位永续合约仓位信息
@@ -48,6 +48,9 @@ class PerpetualExchangeService(ExchangeInterface):
         self.password = self._get_env_variable("PASSWORD")
         self.exchange = self._initialize_exchange()
         self.connection_active = False
+        self.base_currency = config_manager.get_base_currency()
+        self.quote_currency = config_manager.get_quote_currency()
+        self.symbol = f"{self.base_currency}/{self.quote_currency}:{self.quote_currency}"
     
     def _get_env_variable(self, key: str) -> str:
         value = os.getenv(key)
@@ -292,10 +295,10 @@ class PerpetualExchangeService(ExchangeInterface):
         except Exception as e:
             raise DataFetchError(f"Failed to set margin type: {str(e)}")
 
-    async def get_positions(self, pair: Optional[str] = None) -> Dict[str, Any]:
+    async def get_positions(self, pairs: List[str]):
         """获取当前持仓信息"""
         try:
-            positions = await self.exchange.fetch_positions(pair)
+            positions = await self.exchange.fetch_positions(pairs)
             return positions
         except Exception as e:
             raise DataFetchError(f"Failed to fetch positions: {str(e)}")

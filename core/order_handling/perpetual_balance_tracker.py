@@ -113,8 +113,8 @@ class PerpetualBalanceTracker:
         result['margin_balance'] = float(usdt_balance)
         
         # 获取持仓信息
-        symbol = self.base_currency + '/' + self.quote_currency
-        positions = await exchange_service.get_positions(symbol)
+        symbol = self.base_currency + '/' + self.quote_currency + ':' + self.quote_currency
+        positions = await exchange_service.get_positions([symbol])
         position_size = 0.0
         
         # 查找当前交易对的持仓
