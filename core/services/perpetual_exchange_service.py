@@ -306,11 +306,19 @@ class PerpetualExchangeService(ExchangeInterface):
         except Exception as e:
             raise DataFetchError(f"Failed to fetch positions: {str(e)}")
 
+    async def get_position(self, pair: str):
+        """获取当前持仓信息"""
+        try:
+            position = await self.exchange.fetch_position(pair)
+            return position
+        except Exception as e:
+            raise DataFetchError(f"Failed to fetch positions: {str(e)}")
+
     async def get_funding_rate(self, pair: str) -> float:
         """获取当前资金费率"""
         try:
             funding_rate = await self.exchange.fetch_funding_rate(pair)
-            return funding_rate['fundingRate']
+            return float(funding_rate['fundingRate'])
         except Exception as e:
             raise DataFetchError(f"Failed to fetch funding rate: {str(e)}")
 

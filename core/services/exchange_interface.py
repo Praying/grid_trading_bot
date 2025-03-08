@@ -70,3 +70,11 @@ class ExchangeInterface(ABC):
     async def get_positions(self, pairs: List[str]):
         """Fetches positions"""
         pass
+
+    @abstractmethod
+    async def get_position(self, pair: str):
+        pass
+    @abstractmethod
+    async def get_funding_rate(self, pair: str) -> float:
+        """Fetches funding rate"""
+        pass

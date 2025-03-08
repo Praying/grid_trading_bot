@@ -109,6 +109,8 @@ class PerpetualGridTradingBot:
                 order_book=order_book,
                 order_execution_strategy=order_execution_strategy,
                 event_bus=self.event_bus,
+                base_currency=base_currency,
+                quote_currency=quote_currency,
                 polling_interval=5.0,
             )
 
@@ -331,3 +333,6 @@ class PerpetualGridTradingBot:
                 error_details=f"Failed to check margin risk: {str(e)}"
             )
             return False  # 发生异常时返回False表示存在风险
+
+    async def get_perpetual_metrics(self):
+        pass

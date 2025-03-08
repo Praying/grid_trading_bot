@@ -1,6 +1,8 @@
 import asyncio, logging
 from typing import Optional
 from core.bot_management.event_bus import EventBus, Events
+from core.order_handling.execution_strategy.perpetual_live_order_execution_strategy import \
+    PerpetualLiveOrderExecutionStrategy
 from core.order_handling.order_book import OrderBook
 from core.order_handling.order import Order, OrderStatus
 from core.order_handling.perpetual_order_book import PerpetualOrderBook
@@ -25,8 +27,10 @@ class PerpetualOrderStatusTracker:
     def __init__(
         self,
         order_book: PerpetualOrderBook,
-        order_execution_strategy,
+        order_execution_strategy: PerpetualLiveOrderExecutionStrategy,
         event_bus: EventBus,
+        base_currency: str,
+        quote_currency: str,
         polling_interval: float = 5.0,  # 合约默认使用更短的轮询间隔
         funding_check_interval: float = 60.0,  # 资金费率检查间隔
     ):
@@ -46,6 +50,8 @@ class PerpetualOrderStatusTracker:
         self.funding_check_interval = funding_check_interval
         self._monitoring_task = None
         self._funding_check_task = None
+        self.base_currency = base_currency
+        self.quote_currency = quote_currency
         self._active_tasks = set()
         self.logger = logging.getLogger(self.__class__.__name__)
 
@@ -171,15 +177,15 @@ class PerpetualOrderStatusTracker:
 
     async def _check_funding_rate(self) -> None:
         """定期检查资金费率并处理资金费用结算"""
+        symbol = f"{self.base_currency}/{self.quote_currency}:{self.quote_currency}"
         try:
             while True:
                 try:
-                    funding_rates = await self.order_execution_strategy.get_funding_rates()
-                    for symbol, rate in funding_rates.items():
-                        self.event_bus.publish_sync(
-                            PerpetualEvents.FUNDING_FEE,
-                            {"symbol": symbol, "rate": rate}
-                        )
+                    funding_rate = await self.order_execution_strategy.get_funding_rate(symbol)
+                    self.event_bus.publish_sync(
+                        PerpetualEvents.FUNDING_FEE,
+                        {"symbol": symbol, "rate": funding_rate}
+                    )
                 except Exception as e:
                     self.logger.error(f"Error checking funding rates: {e}", exc_info=True)
                 await asyncio.sleep(self.funding_check_interval)

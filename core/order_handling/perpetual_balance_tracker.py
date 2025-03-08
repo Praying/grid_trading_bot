@@ -114,23 +114,21 @@ class PerpetualBalanceTracker:
         
         # 获取持仓信息
         symbol = self.base_currency + '/' + self.quote_currency + ':' + self.quote_currency
-        positions = await exchange_service.get_positions([symbol])
+        position = await exchange_service.get_position(symbol)
         position_size = 0.0
         
         # 查找当前交易对的持仓
-        for pos in positions:
-            if pos['symbol'] == symbol:
-                position_size = abs(float(pos.get('contracts', 0)))
-                result['unrealized_pnl'] = float(pos.get('unrealizedPnl', 0))
-                
-                # 判断多空方向并设置相应的持仓信息
-                if pos.get('side') == 'long' or float(pos.get('contracts', 0)) > 0:
-                    result['long_position'] = position_size
-                    result['long_avg_price'] = float(pos.get('entryPrice', 0))
-                elif pos.get('side') == 'short' or float(pos.get('contracts', 0)) < 0:
-                    result['short_position'] = position_size
-                    result['short_avg_price'] = float(pos.get('entryPrice', 0))
-                break
+        if position['symbol'] == symbol:
+            position_size = abs(float(position.get('contracts', 0)))
+            result['unrealized_pnl'] = float(position.get('unrealizedPnl', 0))
+
+            # 判断多空方向并设置相应的持仓信息
+            if position.get('side') == 'long' or float(position.get('contracts', 0)) > 0:
+                result['long_position'] = position_size
+                result['long_avg_price'] = float(position.get('entryPrice', 0))
+            elif position.get('side') == 'short' or float(position.get('contracts', 0)) < 0:
+                result['short_position'] = position_size
+                result['short_avg_price'] = float(position.get('entryPrice', 0))
 
         self.logger.info(f"合约账户余额 - 可用保证金: {result['margin_balance']}, 持仓量: {position_size}")
         return result
@@ -324,3 +322,16 @@ class PerpetualBalanceTracker:
         self.funding_fees += fee
         self.margin_balance -= fee
         self.logger.info(f"Funding fee applied: {fee} USDT. New margin balance: {self.margin_balance} USDT")
+
+
+    def get_total_balance_value(self, price: float) -> float:
+        """
+        计算以法币计的账户总价值，包括预留资金。
+
+        参数:
+            price: 加密货币的当前市场价格。
+
+        返回:
+            float: 以法币计的账户总价值。
+        """
+        return 0.0

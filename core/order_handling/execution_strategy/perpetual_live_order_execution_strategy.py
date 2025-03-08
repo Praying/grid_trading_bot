@@ -247,3 +247,6 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
     ) -> PositionSide:
         """根据订单方向确定仓位方向。"""
         return PositionSide.LONG if order_side == OrderSide.BUY else PositionSide.SHORT
+
+    async def get_funding_rate(self, pair: str)->float:
+        return await self.exchange_service.get_funding_rate(pair)
