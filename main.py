@@ -48,7 +48,7 @@ async def run_perpetual_bot(
     bot = PerpetualGridTradingBot(config_path, config_manager, notification_handler, event_bus, save_performance_results_path,
                          no_plot)
     bot_controller = PerpetualBotController(bot, event_bus)
-    health_check = PerpetualHealthCheck(bot, notification_handler, event_bus)
+    #health_check = PerpetualHealthCheck(bot, notification_handler, event_bus)
 
     if profile:
         cProfile.runctx("asyncio.run(bot.run())", globals(), locals(), "profile_results.prof")
@@ -57,9 +57,10 @@ async def run_perpetual_bot(
     try:
         if bot.trading_mode in {TradingMode.LIVE, TradingMode.PAPER_TRADING}:
             bot_task = asyncio.create_task(bot.run(), name="BotTask")
-            bot_controller_task = asyncio.create_task(bot_controller.command_listener(), name="BotControllerTask")
-            health_check_task = asyncio.create_task(health_check.start(), name="HealthCheckTask")
-            await asyncio.gather(bot_task, bot_controller_task, health_check_task)
+            #bot_controller_task = asyncio.create_task(bot_controller.command_listener(), name="BotControllerTask")
+            #health_check_task = asyncio.create_task(health_check.start(), name="HealthCheckTask")
+            #await asyncio.gather(bot_task, bot_controller_task, health_check_task)
+            await asyncio.gather(bot_task)
         else:
             await bot.run()
 

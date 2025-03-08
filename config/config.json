@@ -22,11 +22,14 @@
   "grid_strategy": {
     "type": "hedged_grid",
     "spacing": "geometric",
-    "num_grids": 50,
+    "num_grids": 80,
+    "value": 7,
+    "ratio": 0.005,
     "range": {
       "top": 750,
       "bottom": 600
-    }
+    },
+    "reversion_price": 720
   },
   "risk_management": {
     "take_profit": {

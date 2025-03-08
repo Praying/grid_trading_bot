@@ -268,16 +268,17 @@ class PerpetualGridTradingStrategy(TradingStrategyInterface):
     async def run(self):
         """运行交易策略"""
         self._running = True        
-        trigger_price = self.grid_manager.get_trigger_price()
+        #trigger_price = self.grid_manager.get_trigger_price()
+        reversion_price = self.grid_manager.get_reversion_price()
 
         if self.trading_mode == TradingMode.BACKTEST:
-            await self._run_backtest(trigger_price)
+            await self._run_backtest(reversion_price)
             self.logger.info("Ending backtest simulation")
             self._running = False
         else:
-            await self._run_live_or_paper_trading(trigger_price)
+            await self._run_live_or_paper_trading(reversion_price)
 
-    async def _run_live_or_paper_trading(self, trigger_price: float):
+    async def _run_live_or_paper_trading(self, reversion_price: float):
         """执行实盘或模拟交易"""
         self.logger.info(f"Starting {'live' if self.trading_mode == TradingMode.LIVE else 'paper'} trading")
         last_price: Optional[float] = None
@@ -295,7 +296,7 @@ class PerpetualGridTradingStrategy(TradingStrategyInterface):
                 
                 grid_orders_initialized = await self._initialize_grid_orders_once(
                     current_price, 
-                    trigger_price, 
+                    reversion_price,
                     grid_orders_initialized, 
                     last_price
                 )
@@ -365,7 +366,7 @@ class PerpetualGridTradingStrategy(TradingStrategyInterface):
     async def _initialize_grid_orders_once(
         self, 
         current_price: float, 
-        trigger_price: float, 
+        reversion_price: float,
         grid_orders_initialized: bool,
         last_price: Optional[float] = None
     ) -> bool:
@@ -377,12 +378,19 @@ class PerpetualGridTradingStrategy(TradingStrategyInterface):
             self.logger.debug("No previous price recorded yet. Waiting for the next price update.")
             return False
 
-        if last_price <= trigger_price <= current_price or last_price == trigger_price:
-            self.logger.info(f"Current price {current_price} reached trigger price {trigger_price}. Will perform initial purhcase")
+        if current_price < reversion_price:
+            self.logger.info(
+                f"Current price {current_price} reached trigger price {reversion_price}. Will perform initial purhcase")
             await self.order_manager.perform_initial_purchase(current_price)
             self.logger.info(f"Initial purchase done, will initialize grid orders")
             await self.order_manager.initialize_grid_orders(current_price)
             return True
+        # if last_price <= trigger_price <= current_price or last_price == trigger_price:
+        #     self.logger.info(f"Current price {current_price} reached trigger price {trigger_price}. Will perform initial purhcase")
+        #     await self.order_manager.perform_initial_purchase(current_price)
+        #     self.logger.info(f"Initial purchase done, will initialize grid orders")
+        #     await self.order_manager.initialize_grid_orders(current_price)
+        #     return True
 
         self.logger.info(f"Current price {current_price} did not cross trigger price {trigger_price}. Last price: {last_price}.")
         return False

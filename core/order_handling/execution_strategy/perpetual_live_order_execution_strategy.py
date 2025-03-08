@@ -6,6 +6,8 @@ from core.services.exchange_interface import ExchangeInterface
 from core.services.exceptions import DataFetchError
 from .order_execution_strategy_interface import OrderExecutionStrategyInterface
 from ..exceptions import OrderExecutionFailedError
+from ..perpetual_order import PerpetualOrderSide
+
 
 class PositionSide(Enum):
     LONG = "long"
@@ -35,7 +37,7 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
 
     async def execute_market_order(
         self, 
-        order_side: OrderSide, 
+        order_side: PerpetualOrderSide,
         pair: str, 
         quantity: float, 
         price: float,

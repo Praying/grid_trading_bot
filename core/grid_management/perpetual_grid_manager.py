@@ -27,6 +27,7 @@ class PerpetualGridManager:
         self.logger = logging.getLogger(self.__class__.__name__)
         self.price_grids: List[float] = []
         self.central_price: float = 0.0
+        self.reversion_price: float = 0.0
         self.sorted_buy_grids: List[float] = []
         self.sorted_sell_grids: List[float] = []
         self.grid_levels: dict[float, GridLevel] = {}
@@ -61,11 +62,8 @@ class PerpetualGridManager:
         return safe_position_size
 
     def get_initial_order_quantity(
-        self, 
-        available_margin: float,
-        current_positions: float,
+        self,
         current_price: float,
-        position_side: str = "long"
     ) -> float:
         """
         计算网格初始化时要开仓的合约数量。
@@ -79,21 +77,10 @@ class PerpetualGridManager:
         返回:
             要开仓的合约数量
         """
-        # 计算目标仓位价值（基于可用保证金和杠杆）
-        target_position_value = available_margin * self.leverage / 2
-        
-        # 计算当前仓位价值
-        current_position_value = current_positions * current_price
-        
-        # 计算需要开仓的价值
-        value_to_open = target_position_value - current_position_value
-        
-        # 确保不超过可用保证金限制
-        max_value_to_open = available_margin * self.leverage
-        value_to_open = min(value_to_open, max_value_to_open)
-        
-        # 转换为合约数量
-        return max(0, value_to_open / current_price)
+        # 计算当前价格之上的所有网格数量，乘以对应的网格价值
+        count = sum(price > current_price for price in self.price_grids)
+        return count * self.config_manager.get_grid_value()
+
 
     def update_positions(
         self,
@@ -188,8 +175,15 @@ class PerpetualGridManager:
         - 买入网格级别初始化为 `READY_TO_BUY`，顶部网格除外。
         - 卖出网格级别初始化为 `READY_TO_SELL`。
         """
+        self.reversion_price = self.config_manager.get_reversion_price()
+        if self.reversion_price is None:
+            self.logger.info("Reversion price must be set")
+            return None
+
+        self.logger.info(f"Reversion price must be set to {self.reversion_price}")
         # 计算网格价格和中心价格
-        self.price_grids, self.central_price = self._calculate_price_grids_and_central_price()
+        self.price_grids, self.reversion_price = self._calculate_price_grids_and_central_price()
+        self.central_price = self.reversion_price
 
         if self.strategy_type == StrategyType.SIMPLE_GRID:
             # 筛选出低于中心价格的买入网格
@@ -218,6 +212,7 @@ class PerpetualGridManager:
         self.logger.info(f"Buy grids: {self.sorted_buy_grids}")
         self.logger.info(f"Sell grids: {self.sorted_sell_grids}")
         self.logger.info(f"Grid levels: {self.grid_levels}")
+        self.logger.info(f"Reversion price: {self.reversion_price}")
 
     def _extract_grid_config(self) -> Tuple[float, float, int, SpacingType]:
         """
@@ -233,12 +228,31 @@ class PerpetualGridManager:
         spacing_type = self.config_manager.get_spacing_type()
         return bottom_range, top_range, num_grids, spacing_type
 
+    def _extract_grid_new_config(self) -> Tuple[float, float, float, int, SpacingType]:
+        """
+        从配置管理器中提取新的网格配置参数。
+        """
+        # 获取回归价格
+        reversion_price = self.config_manager.get_reversion_price()
+        # 获取网格间距比例
+        grid_ratio = self.config_manager.get_grid_ratio()
+        # 获取网格价值
+        grid_value = self.config_manager.get_grid_value()
+        # 获取网格数量
+        num_grids = self.config_manager.get_num_grids()
+        # 获取间距类型（例如 ARITHMETIC 或 GEOMETRIC）
+        spacing_type = self.config_manager.get_spacing_type()
+
+        return reversion_price, grid_ratio, grid_value, num_grids, spacing_type
+
     def _calculate_price_grids_and_central_price(self) -> Tuple[List[float], float]:
         """
         根据配置计算价格网格和中心价格，考虑合约特性。
         """
-        bottom_range, top_range, num_grids, spacing_type = self._extract_grid_config()
-        
+        #bottom_range, top_range, num_grids, spacing_type = self._extract_grid_config()
+        reversion_price, grid_ratio, grid_value, num_grids, spacing_type = self._extract_grid_new_config()
+        top_range = reversion_price
+        bottom_range = reversion_price * ((1 - grid_ratio) ** num_grids)
         if spacing_type == SpacingType.ARITHMETIC:
             # 调整网格间距
             grid_spacing = (top_range - bottom_range) / (num_grids - 1)
@@ -249,27 +263,16 @@ class PerpetualGridManager:
             central_price = (top_range + bottom_range) / 2
 
         elif spacing_type == SpacingType.GEOMETRIC:
-            ratio = (top_range / bottom_range) ** (1 / (num_grids - 1))
-            # 调整比率以反映杠杆影响
-            #adjusted_ratio = ratio * (1 + (self.leverage - 1) * 0.05)
-            
             grids = []
             current_price = bottom_range
             for _ in range(num_grids):
                 grids.append(current_price)
-                current_price *= ratio
-                #current_price *= adjusted_ratio
-
-            central_index = len(grids) // 2
-            if num_grids % 2 == 0:
-                central_price = (grids[central_index - 1] + grids[central_index]) / 2
-            else:
-                central_price = grids[central_index]
+                current_price = current_price * (1 + grid_ratio)
 
         else:
             raise ValueError(f"不支持的间距类型: {spacing_type}")
 
-        return grids, central_price
+        return grids, reversion_price
 
     def complete_order(
         self,
@@ -324,3 +327,6 @@ class PerpetualGridManager:
 
     def get_trigger_price(self) -> float:
         return self.central_price
+
+    def get_reversion_price(self) -> float:
+        return self.reversion_price

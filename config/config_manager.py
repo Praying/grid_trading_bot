@@ -165,3 +165,15 @@ class ConfigManager:
     def get_liquidation_threshold(self):
         # 维持保证保证金率低于300% 触发预警
         return float(3.0)
+
+    def get_reversion_price(self) -> float:
+        grid_settings = self.get_grid_settings()
+        return grid_settings.get('reversion_price')
+
+    def get_grid_ratio(self) -> float:
+        grid_settings = self.get_grid_settings()
+        return grid_settings.get('ratio', 0.005)
+
+    def get_grid_value(self) -> float:
+        grid_settings = self.get_grid_settings()
+        return grid_settings.get('value', 7.0)

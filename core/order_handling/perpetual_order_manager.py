@@ -1,8 +1,12 @@
 from typing import Dict, List, Optional, Tuple, Union
 import logging
+
+from .execution_strategy.perpetual_live_order_execution_strategy import PerpetualLiveOrderExecutionStrategy
+from .order import OrderSide
 from .perpetual_order import PerpetualOrder, PerpetualOrderSide, PerpetualOrderType, PerpetualOrderStatus
 from .perpetual_order_book import PerpetualOrderBook
 from .perpetual_balance_tracker import PerpetualBalanceTracker
+from ..grid_management.perpetual_grid_manager import PerpetualGridManager
 from ..validation.perpetual_order_validator import PerpetualOrderValidator
 from ..validation.perpetual_exceptions import (
     InsufficientMarginError,
@@ -19,6 +23,9 @@ class PerpetualOrderManager:
     def __init__(
         self,
         exchange_service: PerpetualExchangeService,
+        grid_manager: PerpetualGridManager,
+        trading_pair: str,
+        order_execution_strategy: PerpetualLiveOrderExecutionStrategy,
         order_book: PerpetualOrderBook,
         balance_tracker: PerpetualBalanceTracker,
         order_validator: PerpetualOrderValidator,
@@ -26,7 +33,10 @@ class PerpetualOrderManager:
         leverage: float = 1.0,
         min_order_value: float = 10.0,  # 最小订单价值（以USDT计）
     ):
+        self.trading_pair = trading_pair
+        self.order_execution_strategy = order_execution_strategy
         self.exchange_service = exchange_service
+        self.grid_manager = grid_manager
         self.order_book = order_book
         self.balance_tracker = balance_tracker
         self.order_validator = order_validator
@@ -378,3 +388,50 @@ class PerpetualOrderManager:
             self.logger.error(f"Unexpected error creating trailing stop order: {str(e)}")
 
         return None
+
+    async def perform_initial_purchase(
+        self,
+        current_price: float
+    ) -> None:
+        """
+        Handles the initial crypto purchase for grid trading strategy if required.
+        执行初始建仓（网格策略可能需要基础仓位）
+        Args:
+            current_price: The current price of the trading pair.
+        """
+        # 计算初始买入量
+        initial_quantity = self.grid_manager.get_initial_order_quantity(
+            current_price=current_price
+        )
+        if initial_quantity <= 0:
+            self.logger.warning("Initial purchase quantity is zero or negative. Skipping initial purchase.")
+            return
+
+        self.logger.info(f"Performing initial crypto purchase: {initial_quantity} at price {current_price}.")
+
+        try:            # 执行市价单建仓
+            buy_order = await self.order_execution_strategy.execute_market_order(
+                PerpetualOrderSide.BUY_OPEN,
+                self.trading_pair,
+                initial_quantity,# 这里算出来的initial_quantity
+                current_price
+            )
+            self.logger.info(f"Initial crypto purchase completed. Order details: {buy_order}")
+            self.order_book.add_order(buy_order)
+            await self.notification_handler.async_send_notification(NotificationType.ORDER_PLACED, order_details=f"Initial purchase done: {str(buy_order)}")
+
+            if self.trading_mode == TradingMode.BACKTEST:
+                await self._simulate_fill(buy_order, buy_order.timestamp)
+            else:
+                # Update fiat and crypto balance in LIVE & PAPER_TRADING modes without simulating it
+                self.balance_tracker.update_after_initial_purchase(initial_order=buy_order)
+
+        except OrderExecutionFailedError as e:
+            self.logger.error(f"Failed while executing initial purchase - {str(e)}", exc_info=True)
+            await self.notification_handler.async_send_notification(NotificationType.ORDER_FAILED, error_details=f"Error while performing initial purchase. {e}")
+
+        except Exception as e:
+            self.logger.error(f"Failed to perform initial purchase at current_price: {current_price} - error: {e}", exc_info=True)
+            await self.notification_handler.async_send_notification(NotificationType.ORDER_FAILED, error_details=f"Error while performing initial purchase. {e}")
+
+
