@@ -37,13 +37,13 @@ class PerpetualOrderBook:
             grid_level: 可选参数，该订单关联的网格层级（None表示非网格订单）
         """
         # 根据订单类型和方向分类存储
-        if order.type in [PerpetualOrderType.STOP_MARKET, PerpetualOrderType.STOP_LIMIT,
+        if order.order_type in [PerpetualOrderType.STOP_MARKET, PerpetualOrderType.STOP_LIMIT,
                          PerpetualOrderType.TAKE_PROFIT_MARKET, PerpetualOrderType.TAKE_PROFIT_LIMIT,
                          PerpetualOrderType.TRAILING_STOP]:
             self.conditional_orders.append(order)
         else:
-            if order.side in [PerpetualOrderSide.OPEN_LONG, PerpetualOrderSide.CLOSE_SHORT]:
-                target_list = self.long_orders['open'] if order.side == PerpetualOrderSide.OPEN_LONG \
+            if order.side in [PerpetualOrderSide.BUY_OPEN, PerpetualOrderSide.SELL_CLOSE]:
+                target_list = self.long_orders['open'] if order.side == PerpetualOrderSide.BUY_OPEN \
                     else self.long_orders['close']
                 target_list.append(order)
             else:  # OPEN_SHORT or CLOSE_LONG

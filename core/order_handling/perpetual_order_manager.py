@@ -1,11 +1,14 @@
 from typing import Dict, List, Optional, Tuple, Union
 import logging
 
+from config.trading_mode import TradingMode
+from .exceptions import OrderExecutionFailedError
 from .execution_strategy.perpetual_live_order_execution_strategy import PerpetualLiveOrderExecutionStrategy
 from .order import OrderSide
 from .perpetual_order import PerpetualOrder, PerpetualOrderSide, PerpetualOrderType, PerpetualOrderStatus
 from .perpetual_order_book import PerpetualOrderBook
 from .perpetual_balance_tracker import PerpetualBalanceTracker
+from ..bot_management.notification.notification_content import NotificationType
 from ..grid_management.perpetual_grid_manager import PerpetualGridManager
 from ..validation.perpetual_order_validator import PerpetualOrderValidator
 from ..validation.perpetual_exceptions import (
@@ -24,6 +27,7 @@ class PerpetualOrderManager:
         self,
         exchange_service: PerpetualExchangeService,
         grid_manager: PerpetualGridManager,
+        trading_mode: TradingMode,
         trading_pair: str,
         order_execution_strategy: PerpetualLiveOrderExecutionStrategy,
         order_book: PerpetualOrderBook,
@@ -33,6 +37,7 @@ class PerpetualOrderManager:
         leverage: float = 1.0,
         min_order_value: float = 10.0,  # 最小订单价值（以USDT计）
     ):
+        self.trading_mode = trading_mode
         self.trading_pair = trading_pair
         self.order_execution_strategy = order_execution_strategy
         self.exchange_service = exchange_service
@@ -413,12 +418,12 @@ class PerpetualOrderManager:
             buy_order = await self.order_execution_strategy.execute_market_order(
                 PerpetualOrderSide.BUY_OPEN,
                 self.trading_pair,
-                initial_quantity,# 这里算出来的initial_quantity
+                initial_quantity/current_price,# 这里算出来的initial_quantity是总价值
                 current_price
             )
             self.logger.info(f"Initial crypto purchase completed. Order details: {buy_order}")
             self.order_book.add_order(buy_order)
-            await self.notification_handler.async_send_notification(NotificationType.ORDER_PLACED, order_details=f"Initial purchase done: {str(buy_order)}")
+            #await self.notification_handler.async_send_notification(NotificationType.ORDER_PLACED, order_details=f"Initial purchase done: {str(buy_order)}")
 
             if self.trading_mode == TradingMode.BACKTEST:
                 await self._simulate_fill(buy_order, buy_order.timestamp)
@@ -428,10 +433,16 @@ class PerpetualOrderManager:
 
         except OrderExecutionFailedError as e:
             self.logger.error(f"Failed while executing initial purchase - {str(e)}", exc_info=True)
-            await self.notification_handler.async_send_notification(NotificationType.ORDER_FAILED, error_details=f"Error while performing initial purchase. {e}")
+            #await self.notification_handler.async_send_notification(NotificationType.ORDER_FAILED, error_details=f"Error while performing initial purchase. {e}")
 
         except Exception as e:
             self.logger.error(f"Failed to perform initial purchase at current_price: {current_price} - error: {e}", exc_info=True)
-            await self.notification_handler.async_send_notification(NotificationType.ORDER_FAILED, error_details=f"Error while performing initial purchase. {e}")
+            #await self.notification_handler.async_send_notification(NotificationType.ORDER_FAILED, error_details=f"Error while performing initial purchase. {e}")
+
+    async def _simulate_fill(self, buy_order, timestamp):
+        pass
+
+    async def initialize_grid_orders(self, current_price: float):
+        pass
 
 

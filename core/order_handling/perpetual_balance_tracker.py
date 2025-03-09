@@ -335,3 +335,6 @@ class PerpetualBalanceTracker:
             float: 以法币计的账户总价值。
         """
         return 0.0
+
+    def update_after_initial_purchase(self, initial_order):
+        pass

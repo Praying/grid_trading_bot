@@ -3,6 +3,8 @@ from ccxt.base.errors import NetworkError, BaseError, ExchangeError, OrderNotFou
 import ccxt.pro as ccxtpro
 from typing import Dict, Union, Callable, Any, Optional, List
 import pandas as pd
+from ccxt.base.types import OrderType
+
 from config.config_manager import ConfigManager
 from .exchange_interface import ExchangeInterface
 from .exceptions import UnsupportedExchangeError, DataFetchError, OrderCancellationError, MissingEnvironmentVariableError
@@ -54,6 +56,10 @@ class PerpetualExchangeService(ExchangeInterface):
         self.base_currency = config_manager.get_base_currency()
         self.quote_currency = config_manager.get_quote_currency()
         self.symbol = f"{self.base_currency}/{self.quote_currency}:{self.quote_currency}"
+
+        self.set_position_mode(self.symbol, False)
+        self.set_leverage(self.symbol, 10)
+        self.set_margin_type(self.symbol, 'cross')
     
     def _get_env_variable(self, key: str) -> str:
         value = os.getenv(key)
@@ -75,6 +81,7 @@ class PerpetualExchangeService(ExchangeInterface):
             # 打开模拟交易模式（确保使用OKX模拟盘接口）
             if self.is_paper_trading_activated:
                 exchange.set_sandbox_mode(True)
+
             return exchange
         except AttributeError:
             raise UnsupportedExchangeError(f"The exchange '{self.exchange_name}' is not supported.")
@@ -175,32 +182,9 @@ class PerpetualExchangeService(ExchangeInterface):
         order_side: str, 
         amount: float, 
         price: Optional[float] = None,
-        leverage: int = 1,
-        margin_type: str = 'isolated',  # 'isolated' or 'cross'
-        reduce_only: bool = False,
-        position_side: str = 'LONG'  # 'BOTH', 'LONG' or 'SHORT', 只做多
     ) -> Dict[str, Union[str, float]]:
         try:
-            # 设置杠杆倍数
-            await self.set_leverage(pair, leverage)
-            
-            # 设置保证金类型
-            await self.set_margin_type(pair, margin_type)
-
-            # 构建订单参数
-            params = {
-                'reduceOnly': reduce_only,
-                'positionSide': position_side
-            }
-
-            order = await self.exchange.create_order(
-                pair, 
-                order_type, 
-                order_side, 
-                amount, 
-                price,
-                params
-            )
+            order = await self.exchange.create_order(pair, order_type, order_side, amount, price)
             return order
 
         except NetworkError as e:
@@ -297,6 +281,13 @@ class PerpetualExchangeService(ExchangeInterface):
             return await self.exchange.set_margin_mode(margin_type.lower(), pair)
         except Exception as e:
             raise DataFetchError(f"Failed to set margin type: {str(e)}")
+
+    async def set_position_mode(self, pair: str, hedged: bool):
+        """设置仓位模式（单向持仓或双向持仓）"""
+        try:
+            return await self.exchange.set_position_mode(hedged, pair)
+        except Exception as e:
+            raise DataFetchError(f"Failed to set position mode: {str(e)}")
 
     async def get_positions(self, pairs: List[str]):
         """获取当前持仓信息"""

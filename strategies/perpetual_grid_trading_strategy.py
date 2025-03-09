@@ -379,8 +379,7 @@ class PerpetualGridTradingStrategy(TradingStrategyInterface):
             return False
 
         if current_price < reversion_price:
-            self.logger.info(
-                f"Current price {current_price} reached trigger price {reversion_price}. Will perform initial purhcase")
+            self.logger.info(f"Current price {current_price} reached trigger price {reversion_price}. Will perform initial purhcase")
             await self.order_manager.perform_initial_purchase(current_price)
             self.logger.info(f"Initial purchase done, will initialize grid orders")
             await self.order_manager.initialize_grid_orders(current_price)

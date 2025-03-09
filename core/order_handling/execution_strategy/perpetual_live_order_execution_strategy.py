@@ -6,7 +6,7 @@ from core.services.exchange_interface import ExchangeInterface
 from core.services.exceptions import DataFetchError
 from .order_execution_strategy_interface import OrderExecutionStrategyInterface
 from ..exceptions import OrderExecutionFailedError
-from ..perpetual_order import PerpetualOrderSide
+from ..perpetual_order import PerpetualOrderSide, PerpetualOrder, PerpetualOrderType
 
 
 class PositionSide(Enum):
@@ -42,29 +42,18 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
         quantity: float, 
         price: float,
         position_side: Optional[PositionSide] = None
-    ) -> Optional[Order]:
+    ) -> Optional[PerpetualOrder]:
         for attempt in range(self.max_retries):
             try:
-                # 设置杠杆和保证金模式
-                await self._setup_leverage_and_margin(pair)
-                
                 # 确定仓位方向
                 position_side = position_side or self._determine_position_side(order_side)
-                
-                # 构建订单参数
-                order_params = {
-                    "positionSide": position_side.value,
-                    "leverage": self.leverage,
-                    "marginMode": self.margin_mode.value
-                }
-                
+
                 raw_order = await self.exchange_service.place_order(
                     pair, 
-                    OrderType.MARKET.value.lower(), 
+                    OrderType.MARKET.value.lower(),
                     order_side.name.lower(), 
                     quantity, 
                     price,
-                    params=order_params
                 )
                 
                 order_result = await self._parse_order_result(raw_order)
@@ -95,26 +84,12 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
         position_side: Optional[PositionSide] = None
     ) -> Optional[Order]:
         try:
-            # 设置杠杆和保证金模式
-            await self._setup_leverage_and_margin(pair)
-            
-            # 确定仓位方向
-            position_side = position_side or self._determine_position_side(order_side)
-            
-            # 构建订单参数
-            order_params = {
-                "positionSide": position_side.value,
-                "leverage": self.leverage,
-                "marginMode": self.margin_mode.value
-            }
-            
             raw_order = await self.exchange_service.place_order(
                 pair, 
                 OrderType.LIMIT.value.lower(), 
                 order_side.name.lower(), 
                 quantity, 
                 price,
-                params=order_params
             )
             
             order_result = await self._parse_order_result(raw_order)
@@ -245,10 +220,10 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
 
     def _determine_position_side(
         self,
-        order_side: OrderSide
+        order_side: PerpetualOrderSide,
     ) -> PositionSide:
         """根据订单方向确定仓位方向。"""
-        return PositionSide.LONG if order_side == OrderSide.BUY else PositionSide.SHORT
+        return PositionSide.LONG if order_side == PerpetualOrderSide.BUY_OPEN else PositionSide.SHORT
 
     async def get_funding_rate(self, pair: str)->float:
         return await self.exchange_service.get_funding_rate(pair)
