@@ -1,6 +1,7 @@
 import asyncio, logging
 from typing import Optional
 from core.bot_management.event_bus import EventBus, Events
+from core.order_handling.execution_strategy.order_execution_strategy_interface import OrderExecutionStrategyInterface
 from core.order_handling.execution_strategy.perpetual_live_order_execution_strategy import \
     PerpetualLiveOrderExecutionStrategy
 from core.order_handling.order_book import OrderBook
@@ -27,7 +28,7 @@ class PerpetualOrderStatusTracker:
     def __init__(
         self,
         order_book: PerpetualOrderBook,
-        order_execution_strategy: PerpetualLiveOrderExecutionStrategy,
+        order_execution_strategy: OrderExecutionStrategyInterface,
         event_bus: EventBus,
         base_currency: str,
         quote_currency: str,

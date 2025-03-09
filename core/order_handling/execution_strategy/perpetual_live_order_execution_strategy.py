@@ -37,7 +37,7 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
 
     async def execute_market_order(
         self, 
-        order_side: PerpetualOrderSide,
+        order_side: OrderSide,
         pair: str, 
         quantity: float, 
         price: float,
@@ -45,13 +45,10 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
     ) -> Optional[PerpetualOrder]:
         for attempt in range(self.max_retries):
             try:
-                # 确定仓位方向
-                position_side = position_side or self._determine_position_side(order_side)
-
                 raw_order = await self.exchange_service.place_order(
-                    pair, 
+                    pair,
                     OrderType.MARKET.value.lower(),
-                    order_side.name.lower(), 
+                    order_side.value.lower(),
                     quantity, 
                     price,
                 )
@@ -126,17 +123,20 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
         raw_order_result: dict
     ) -> Order:
         """解析永续合约订单响应，包含合约特有字段。"""
+        status = raw_order_result.get("status")
+        if status is None:
+            status = "unknown"
         return Order(
             identifier=raw_order_result.get("id", ""),
-            status=OrderStatus(raw_order_result.get("status", "unknown").lower()),
+            status=OrderStatus(status),
             order_type=OrderType(raw_order_result.get("type", "unknown").lower()),
             side=OrderSide(raw_order_result.get("side", "unknown").lower()),
-            price=raw_order_result.get("price", 0.0),
+            price= 0.0 if not raw_order_result.get("price", 0.0) else float(raw_order_result.get("price", 0.0)),
             average=raw_order_result.get("average", None),
-            amount=raw_order_result.get("amount", 0.0),
-            filled=raw_order_result.get("filled", 0.0),
-            remaining=raw_order_result.get("remaining", 0.0),
-            timestamp=raw_order_result.get("timestamp", 0),
+            amount=0.0 if not raw_order_result.get("amount", 0.0) else float(raw_order_result.get("amount", 0.0)),
+            filled= 0.0 if not raw_order_result.get("filled", 0.0) else float(raw_order_result.get("filled", 0.0)),
+            remaining= 0.0 if not raw_order_result.get("remaining", 0.0) else float(raw_order_result.get("remaining", 0.0)),
+            timestamp=0 if not raw_order_result.get("timestamp", 0) else int(raw_order_result.get("timestamp", 0)),
             datetime=raw_order_result.get("datetime", None),
             last_trade_timestamp=raw_order_result.get("lastTradeTimestamp", None),
             symbol=raw_order_result.get("symbol", ""),

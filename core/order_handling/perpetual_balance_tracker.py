@@ -115,12 +115,14 @@ class PerpetualBalanceTracker:
         # 获取持仓信息
         symbol = self.base_currency + '/' + self.quote_currency + ':' + self.quote_currency
         position = await exchange_service.get_position(symbol)
+        if not position:
+            return result
         position_size = 0.0
-        
         # 查找当前交易对的持仓
         if position['symbol'] == symbol:
             position_size = abs(float(position.get('contracts', 0)))
-            result['unrealized_pnl'] = float(position.get('unrealizedPnl', 0))
+            if not position.get('unrealizedPnl'):
+                result['unrealized_pnl'] = 0.0
 
             # 判断多空方向并设置相应的持仓信息
             if position.get('side') == 'long' or float(position.get('contracts', 0)) > 0:

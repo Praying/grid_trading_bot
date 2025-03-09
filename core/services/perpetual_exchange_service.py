@@ -57,10 +57,11 @@ class PerpetualExchangeService(ExchangeInterface):
         self.quote_currency = config_manager.get_quote_currency()
         self.symbol = f"{self.base_currency}/{self.quote_currency}:{self.quote_currency}"
 
-        self.set_position_mode(self.symbol, False)
-        self.set_leverage(self.symbol, 10)
-        self.set_margin_type(self.symbol, 'cross')
-    
+    async def initialize(self):
+        await self.set_position_mode(self.symbol, False)
+        await self.set_leverage(self.symbol, 10)
+        await self.set_margin_type(self.symbol, 'cross', 10)
+
     def _get_env_variable(self, key: str) -> str:
         value = os.getenv(key)
         if value is None:
@@ -275,10 +276,10 @@ class PerpetualExchangeService(ExchangeInterface):
         except Exception as e:
             raise DataFetchError(f"Failed to set leverage: {str(e)}")
 
-    async def set_margin_type(self, pair: str, margin_type: str) -> dict:
+    async def set_margin_type(self, pair: str, margin_type: str, leverage: int) -> dict:
         """设置保证金类型（全仓或逐仓）"""
         try:
-            return await self.exchange.set_margin_mode(margin_type.lower(), pair)
+            return await self.exchange.set_margin_mode(margin_type.lower(), pair, params={'leverage': leverage})
         except Exception as e:
             raise DataFetchError(f"Failed to set margin type: {str(e)}")
 

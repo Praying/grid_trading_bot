@@ -79,7 +79,7 @@ class PerpetualGridTradingBot:
             self.trading_mode: TradingMode = self.config_manager.get_trading_mode()
             base_currency: str = self.config_manager.get_base_currency()
             quote_currency: str = self.config_manager.get_quote_currency()
-            trading_pair = f"{base_currency}/{quote_currency}"
+            trading_pair = f"{base_currency}/{quote_currency}:{quote_currency}"
             strategy_type: StrategyType = self.config_manager.get_strategy_type()
             self.logger.info(f"Starting Perpetual Grid Trading Bot in {self.trading_mode.value} mode with strategy: {strategy_type.value}")
             self.is_running = False
@@ -117,11 +117,14 @@ class PerpetualGridTradingBot:
             # 创建永续合约订单管理器
             order_manager = PerpetualOrderManager(
                 self.exchange_service,
+                grid_manager,
+                self.trading_mode,
+                trading_pair,
+                order_execution_strategy,
                 order_book,
                 self.balance_tracker,
                 order_validator,
                 self.event_bus,
-                config_manager.get_trading_settings()["leverage"],
                 5.0,
             )
             
@@ -168,6 +171,7 @@ class PerpetualGridTradingBot:
         try:
             self.is_running = True
 
+            await self.exchange_service.initialize()
             # 设置初始保证金
             await self.balance_tracker.setup_balances(
                 initial_margin=self.config_manager.get_initial_balance(),

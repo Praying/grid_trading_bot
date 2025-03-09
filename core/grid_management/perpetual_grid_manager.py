@@ -180,7 +180,7 @@ class PerpetualGridManager:
             self.logger.info("Reversion price must be set")
             return None
 
-        self.logger.info(f"Reversion price must be set to {self.reversion_price}")
+        self.logger.info(f"Reversion price be set to {self.reversion_price}")
         # 计算网格价格和中心价格
         self.price_grids, self.reversion_price = self._calculate_price_grids_and_central_price()
         self.central_price = self.reversion_price

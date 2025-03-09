@@ -3,6 +3,7 @@ import logging
 
 from config.trading_mode import TradingMode
 from .exceptions import OrderExecutionFailedError
+from .execution_strategy.order_execution_strategy_interface import OrderExecutionStrategyInterface
 from .execution_strategy.perpetual_live_order_execution_strategy import PerpetualLiveOrderExecutionStrategy
 from .order import OrderSide
 from .perpetual_order import PerpetualOrder, PerpetualOrderSide, PerpetualOrderType, PerpetualOrderStatus
@@ -29,12 +30,11 @@ class PerpetualOrderManager:
         grid_manager: PerpetualGridManager,
         trading_mode: TradingMode,
         trading_pair: str,
-        order_execution_strategy: PerpetualLiveOrderExecutionStrategy,
+        order_execution_strategy: OrderExecutionStrategyInterface,
         order_book: PerpetualOrderBook,
         balance_tracker: PerpetualBalanceTracker,
         order_validator: PerpetualOrderValidator,
         event_bus: EventBus,
-        leverage: float = 1.0,
         min_order_value: float = 10.0,  # 最小订单价值（以USDT计）
     ):
         self.trading_mode = trading_mode
@@ -46,7 +46,6 @@ class PerpetualOrderManager:
         self.balance_tracker = balance_tracker
         self.order_validator = order_validator
         self.event_bus = event_bus
-        self.leverage = leverage
         self.min_order_value = min_order_value
         self.logger = logging.getLogger(self.__class__.__name__)
 
@@ -416,7 +415,7 @@ class PerpetualOrderManager:
 
         try:            # 执行市价单建仓
             buy_order = await self.order_execution_strategy.execute_market_order(
-                PerpetualOrderSide.BUY_OPEN,
+                OrderSide.BUY,
                 self.trading_pair,
                 initial_quantity/current_price,# 这里算出来的initial_quantity是总价值
                 current_price
