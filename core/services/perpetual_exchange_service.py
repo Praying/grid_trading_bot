@@ -44,6 +44,9 @@ class PerpetualExchangeService(ExchangeInterface):
         config_manager: ConfigManager, 
         is_paper_trading_activated: bool
     ):
+        self.price_precision = None
+        self.amount_precision = None
+        self.markets = None
         self.config_manager = config_manager
         self.is_paper_trading_activated = is_paper_trading_activated
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -58,9 +61,23 @@ class PerpetualExchangeService(ExchangeInterface):
         self.symbol = f"{self.base_currency}/{self.quote_currency}:{self.quote_currency}"
 
     async def initialize(self):
-        await self.set_position_mode(self.symbol, False)
-        await self.set_leverage(self.symbol, 10)
-        await self.set_margin_type(self.symbol, 'cross', 10)
+        self.markets = await self.exchange.load_markets()
+        if self.symbol in self.markets:
+            market = self.markets[self.symbol]
+            self.amount_precision = float(market['precision']['amount'])
+            self.price_precision = float(market['precision']['price'])
+            self.logger.info(f"{self.symbol}最小交易数量精度: {market['precision']['amount']}")
+            self.logger.info(f"{self.symbol}最小交易价格精度: {market['precision']['price']}")
+        positions = await self.get_position(self.symbol)
+        # 判断positions长度是否为空
+        if len(positions) > 0:
+            self.logger.info(f"{self.symbol}仓位信息: {positions}")
+        else:
+            self.logger.info(f"{self.symbol}仓位信息为空")
+            await self.set_position_mode(self.symbol, False)
+            await self.set_leverage(self.symbol, 10)
+            await self.set_margin_type(self.symbol, 'cross', 10)
+
 
     def _get_env_variable(self, key: str) -> str:
         value = os.getenv(key)
@@ -82,7 +99,6 @@ class PerpetualExchangeService(ExchangeInterface):
             # 打开模拟交易模式（确保使用OKX模拟盘接口）
             if self.is_paper_trading_activated:
                 exchange.set_sandbox_mode(True)
-
             return exchange
         except AttributeError:
             raise UnsupportedExchangeError(f"The exchange '{self.exchange_name}' is not supported.")

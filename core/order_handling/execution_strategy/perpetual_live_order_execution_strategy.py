@@ -57,7 +57,6 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
                 
                 if order_result.status == OrderStatus.CLOSED:
                     return order_result
-
                 elif order_result.status == OrderStatus.OPEN:
                     await self._handle_partial_fill(order_result, pair)
 

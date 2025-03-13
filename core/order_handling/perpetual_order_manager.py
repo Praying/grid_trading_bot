@@ -414,10 +414,11 @@ class PerpetualOrderManager:
         self.logger.info(f"Performing initial crypto purchase: {initial_quantity} at price {current_price}.")
 
         try:            # 执行市价单建仓
+            buy_amount = max(initial_quantity/current_price, self.exchange_service.amount_precision)
             buy_order = await self.order_execution_strategy.execute_market_order(
                 OrderSide.BUY,
                 self.trading_pair,
-                initial_quantity/current_price,# 这里算出来的initial_quantity是总价值
+                buy_amount,# 这里算出来的initial_quantity是总价值
                 current_price
             )
             self.logger.info(f"Initial crypto purchase completed. Order details: {buy_order}")
