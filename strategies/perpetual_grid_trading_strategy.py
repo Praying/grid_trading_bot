@@ -280,7 +280,7 @@ class PerpetualGridTradingStrategy(TradingStrategyInterface):
 
     async def _run_live_or_paper_trading(self, reversion_price: float):
         """执行实盘或模拟交易"""
-        self.logger.info(f"Starting {'live' if self.trading_mode == TradingMode.LIVE else 'paper'} trading")
+        self.logger.info(f"Starting {'live' if self.trading_mode == TradingMode.LIVE else 'paper'}  trading")
         last_price: Optional[float] = None
         grid_orders_initialized = False
 

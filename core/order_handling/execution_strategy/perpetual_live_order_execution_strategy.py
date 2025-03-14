@@ -78,7 +78,7 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
         quantity: float, 
         price: float,
         position_side: Optional[PositionSide] = None
-    ) -> Optional[Order]:
+    ) -> Optional[PerpetualOrder]:
         try:
             raw_order = await self.exchange_service.place_order(
                 pair, 
@@ -120,12 +120,12 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
     async def _parse_order_result(
         self, 
         raw_order_result: dict
-    ) -> Order:
+    ) -> PerpetualOrder:
         """解析永续合约订单响应，包含合约特有字段。"""
         status = raw_order_result.get("status")
         if status is None:
-            status = "unknown"
-        return Order(
+            status = OrderStatus.OPEN
+        return PerpetualOrder(
             identifier=raw_order_result.get("id", ""),
             status=OrderStatus(status),
             order_type=OrderType(raw_order_result.get("type", "unknown").lower()),
@@ -174,7 +174,7 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
     
     async def _handle_partial_fill(
         self, 
-        order: Order, 
+        order: PerpetualOrder,
         pair: str,
     ) -> Optional[dict]:
         """处理永续合约部分成交订单。"""

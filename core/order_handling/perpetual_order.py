@@ -56,6 +56,7 @@ class PerpetualOrder:
         contracts: float,  # 合约张数
         contract_size: float,  # 合约面值
         filled: float,
+        amount: float,
         remaining: float,
         timestamp: int,
         datetime: Optional[str],
@@ -78,6 +79,7 @@ class PerpetualOrder:
         self.status = status
         self.order_type = order_type
         self.side = side
+        self.amount = amount
         self.price = price
         self.average = average
         self.contracts = contracts
@@ -151,3 +153,7 @@ class PerpetualOrder:
 
     def __repr__(self) -> str:
         return self.__str__()
+
+    @amount.setter
+    def amount(self, value):
+        self._amount = value
