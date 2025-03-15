@@ -330,3 +330,44 @@ class PerpetualGridManager:
 
     def get_reversion_price(self) -> float:
         return self.reversion_price
+    def can_place_order(
+        self,
+        grid_level: GridLevel,
+        order_side: OrderSide,
+    ) -> bool:
+        """
+        确定是否可以在给定的网格级别上放置订单。
+
+        参数:
+            grid_level: 被评估的网格级别。
+            order_side: 订单的类型（买入或卖出）。
+
+        返回:
+            bool: 如果可以放置订单则为 True，否则为 False。
+        """
+        return True
+
+    def mark_order_pending(
+        self,
+        grid_level: GridLevel,
+        order: Order
+    ) -> None:
+        """
+        将网格级别标记为有待定订单（买入或卖出）。
+
+        参数:
+            grid_level: 要更新的网格级别。
+            order: 表示待定订单的 Order 对象。
+            order_side: 订单的类型（买入或卖出）。
+        """
+        # 将订单添加到网格级别
+        grid_level.add_order(order)
+        # 更新状态为等待买入订单成交
+        if order.side == OrderSide.BUY:
+            # 更新状态为等待买入订单成交
+            grid_level.state = GridCycleState.WAITING_FOR_BUY_FILL
+            self.logger.info(f"Buy order placed and marked as pending at grid level {grid_level.price}.")
+        elif order.side == OrderSide.SELL:
+            # 更新状态为等待卖出订单成交
+            grid_level.state = GridCycleState.WAITING_FOR_SELL_FILL
+            self.logger.info(f"Sell order placed and marked as pending at grid level {grid_level.price}.")

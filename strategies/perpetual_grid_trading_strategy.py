@@ -476,3 +476,6 @@ class PerpetualGridTradingStrategy(TradingStrategyInterface):
     def get_formatted_orders(self):
         """获取格式化的订单记录"""
         return self.trading_performance_analyzer.get_formatted_orders()
+
+    async def _evaluate_tp_or_sl(self, current_price)-> bool:
+        return False

@@ -47,7 +47,7 @@ class PerpetualOrderBook:
                     else self.long_orders['close']
                 target_list.append(order)
             else:  # OPEN_SHORT or CLOSE_LONG
-                target_list = self.short_orders['open'] if order.side == PerpetualOrderSide.OPEN_SHORT \
+                target_list = self.short_orders['open'] if order.side == PerpetualOrderSide.SELL_OPEN \
                     else self.short_orders['close']
                 target_list.append(order)
         

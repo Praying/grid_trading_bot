@@ -443,6 +443,86 @@ class PerpetualOrderManager:
         pass
 
     async def initialize_grid_orders(self, current_price: float):
+        # 初始化买单（仅挂低于当前价的网格）
+        for price in self.grid_manager.sorted_buy_grids:
+            if price >= current_price:
+                self.logger.info(f"Skipping grid level at price: {price} for BUY order: Above current price.")
+                continue# 跳过高于当前价的网格
+            # 获取网格层级对象
+            grid_level = self.grid_manager.grid_levels[price]
+
+            if self.grid_manager.can_place_order(grid_level, OrderSide.BUY):
+                try:
+                    # 执行限价买单 , TODO 这里需要计算正确的订单数量
+                    adjusted_buy_order_quantity = 1.0
+                    self.logger.info(
+                        f"Placing initial buy limit order at grid level {price} for  {self.trading_pair}.")
+                    order = await self.order_execution_strategy.execute_limit_order(
+                        OrderSide.BUY,
+                        self.trading_pair,
+                        adjusted_buy_order_quantity,
+                        price
+                    )
+
+                    if order is None:
+                        self.logger.error(f"Failed to place buy order at {price}: No order returned.")
+                        continue
+                    # 更新网格状态
+                    self.grid_manager.mark_order_pending(grid_level, order)
+                    # 记录订单到订单簿
+                    self.order_book.add_order(order, grid_level)
+
+                except OrderExecutionFailedError as e:
+                    self.logger.error(f"Failed to initialize buy order at grid level {price} - {str(e)}", exc_info=True)
+                    #await self.notification_handler.async_send_notification(NotificationType.ORDER_FAILED, error_details=f"Error while placing initial buy order. {e}")
+
+                except Exception as e:
+                    self.logger.error(f"Unexpected error during buy order initialization at grid level {price}: {e}", exc_info=True)
+                    #await self.notification_handler.async_send_notification(NotificationType.ERROR_OCCURRED, error_details=f"Error while placing initial buy order: {str(e)}")
+
+        for price in self.grid_manager.sorted_sell_grids:
+            if price <= current_price:
+                self.logger.info(f"Skipping grid level at price: {price} for SELL order: Below or equal to current price.")
+                continue
+
+            grid_level = self.grid_manager.grid_levels[price]
+            # total_balance_value = self.balance_tracker.get_total_balance_value(current_price)
+            # order_quantity = self.grid_manager.get_order_size_for_grid_level(total_balance_value, current_price)
+            if self.grid_manager.can_place_order(grid_level, OrderSide.SELL):
+                try:
+                    # adjusted_sell_order_quantity = self.order_validator.adjust_and_validate_sell_quantity(
+                    #     crypto_balance=self.balance_tracker.crypto_balance,
+                    #     order_quantity=order_quantity
+                    # )
+
+                    adjusted_sell_order_quantity = 1.0
+
+                    self.logger.info(
+                        f"Placing initial sell limit order at grid level {price} for {adjusted_sell_order_quantity} {self.trading_pair}.")
+                    order = await self.order_execution_strategy.execute_limit_order(
+                        OrderSide.SELL,
+                        self.trading_pair,
+                        adjusted_sell_order_quantity,
+                        price
+                    )
+
+                    if order is None:
+                        self.logger.error(f"Failed to place sell order at {price}: No order returned.")
+                        continue
+
+                    #self.balance_tracker.reserve_funds_for_sell(adjusted_sell_order_quantity)
+                    self.grid_manager.mark_order_pending(grid_level, order)
+                    self.order_book.add_order(order, grid_level)
+
+                except OrderExecutionFailedError as e:
+                    self.logger.error(f"Failed to initialize sell order at grid level {price} - {str(e)}", exc_info=True)
+                    #await self.notification_handler.async_send_notification(NotificationType.ORDER_FAILED, error_details=f"Error while placing initial sell order. {e}")
+                except Exception as e:
+                    self.logger.error(f"Unexpected error during sell order initialization at grid level {price}: {e}",
+                                      exc_info=True)
+                    #await self.notification_handler.async_send_notification(NotificationType.ERROR_OCCURRED,
+                                                                            #error_details=f"Error while placing initial sell order: {str(e)}")
+
         pass
 
 

@@ -6,14 +6,9 @@ from core.order_handling.execution_strategy.perpetual_live_order_execution_strat
     PerpetualLiveOrderExecutionStrategy
 from core.order_handling.order_book import OrderBook
 from core.order_handling.order import Order, OrderStatus
+from core.order_handling.perpetual_order import PerpetualOrderStatus
 from core.order_handling.perpetual_order_book import PerpetualOrderBook
 
-
-class PerpetualOrderStatus:
-    """永续合约特有的订单状态"""
-    LIQUIDATED = "liquidated"  # 强平状态
-    ADL = "adl"  # 自动减仓状态
-    PARTIAL_CLOSE = "partial_close"  # 部分平仓状态
 
 class PerpetualEvents:
     """永续合约特有的事件类型"""
@@ -134,15 +129,15 @@ class PerpetualOrderStatusTracker:
                 self._handle_adl(remote_order)
             elif remote_order.status == PerpetualOrderStatus.PARTIAL_CLOSE:
                 self._handle_partial_close(remote_order)
-            elif remote_order.status == OrderStatus.CLOSED:
-                self.order_book.update_order_status(remote_order.identifier, OrderStatus.CLOSED)
+            elif remote_order.status == PerpetualOrderStatus.CLOSED:
+                self.order_book.update_order_status(remote_order.identifier, PerpetualOrderStatus.CLOSED)
                 self.event_bus.publish_sync(Events.ORDER_FILLED, remote_order)
                 self.logger.info(f"Order {remote_order.identifier} filled.")
-            elif remote_order.status == OrderStatus.CANCELED:
-                self.order_book.update_order_status(remote_order.identifier, OrderStatus.CANCELED)
+            elif remote_order.status == PerpetualOrderStatus.CANCELED:
+                self.order_book.update_order_status(remote_order.identifier, PerpetualOrderStatus.CANCELED)
                 self.event_bus.publish_sync(Events.ORDER_CANCELLED, remote_order)
                 self.logger.warning(f"Order {remote_order.identifier} was canceled.")
-            elif remote_order.status == OrderStatus.OPEN:
+            elif remote_order.status == PerpetualOrderStatus.OPEN:
                 if remote_order.filled > 0:
                     self.logger.info(f"Order {remote_order} partially filled. Filled: {remote_order.filled}, Remaining: {remote_order.remaining}.")
                 else:
@@ -150,7 +145,7 @@ class PerpetualOrderStatusTracker:
             else:
                 self.logger.warning(f"Unhandled order status '{remote_order.status}' for order {remote_order.identifier}.")
 
-            self._check_liquidation_risk(remote_order)
+            #self._check_liquidation_risk(remote_order)
 
         except Exception as e:
             self.logger.error(f"Error handling perpetual order status change: {e}", exc_info=True)

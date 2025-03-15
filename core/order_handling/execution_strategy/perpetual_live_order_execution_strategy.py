@@ -6,7 +6,7 @@ from core.services.exchange_interface import ExchangeInterface
 from core.services.exceptions import DataFetchError
 from .order_execution_strategy_interface import OrderExecutionStrategyInterface
 from ..exceptions import OrderExecutionFailedError
-from ..perpetual_order import PerpetualOrderSide, PerpetualOrder, PerpetualOrderType
+from ..perpetual_order import PerpetualOrderSide, PerpetualOrder, PerpetualOrderType, MarginType, PerpetualOrderStatus
 
 
 class PositionSide(Enum):
@@ -52,18 +52,14 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
                     quantity, 
                     price,
                 )
-                
-                order_result = await self._parse_order_result(raw_order)
-                
-                if order_result.status == OrderStatus.CLOSED:
-                    return order_result
-                elif order_result.status == OrderStatus.OPEN:
-                    await self._handle_partial_fill(order_result, pair)
-
-                await asyncio.sleep(self.retry_delay)
-                self.logger.info(f"Retrying order. Attempt {attempt + 1}/{self.max_retries}.")
-                price = await self._adjust_price(order_side, price, attempt)
-
+                # 等待订单完成并获取成交信息
+                while True:
+                    await asyncio.sleep(0.5)
+                    order_status = await self.exchange_service.fetch_order(raw_order['id'], pair)
+                    if order_status['status'] == 'closed':
+                        self.logger.info(f"订单已成交，均价: {order_status['average']}")
+                        order_result = self.parse_order_status(raw_order)
+                        return order_result
             except Exception as e:
                 self.logger.error(f"Attempt {attempt + 1} failed with error: {str(e)}")
                 await asyncio.sleep(self.retry_delay)
@@ -117,19 +113,15 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
         except Exception as e:
             raise DataFetchError(f"Unexpected error during perpetual order status retrieval: {str(e)}")
 
-    async def _parse_order_result(
-        self, 
-        raw_order_result: dict
-    ) -> PerpetualOrder:
-        """解析永续合约订单响应，包含合约特有字段。"""
-        status = raw_order_result.get("status")
-        if status is None:
-            status = OrderStatus.OPEN
+    def parse_order_status(self, raw_order_result: dict) -> PerpetualOrder:
+        status = PerpetualOrderStatus.OPEN
+        if raw_order_result.get("status") == "closed":
+            status = PerpetualOrderStatus.CLOSED
         return PerpetualOrder(
             identifier=raw_order_result.get("id", ""),
-            status=OrderStatus(status),
-            order_type=OrderType(raw_order_result.get("type", "unknown").lower()),
-            side=OrderSide(raw_order_result.get("side", "unknown").lower()),
+            status=PerpetualOrderStatus(status),
+            order_type=PerpetualOrderType(raw_order_result.get("type", "unknown").lower()),
+            side=PerpetualOrderSide(raw_order_result.get("side", "unknown").lower()),
             price= 0.0 if not raw_order_result.get("price", 0.0) else float(raw_order_result.get("price", 0.0)),
             average=raw_order_result.get("average", None),
             amount=0.0 if not raw_order_result.get("amount", 0.0) else float(raw_order_result.get("amount", 0.0)),
@@ -143,14 +135,51 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
             trades=raw_order_result.get("trades", []),
             fee=raw_order_result.get("fee", None),
             cost=raw_order_result.get("cost", None),
+            contracts = 0.0,
+            contract_size = 0.0,
+            leverage = 0.0,
+            margin_type = MarginType.CROSS,
+            position_side = PositionSide.LONG,
             info={
-                **raw_order_result.get("info", {}),
-                "positionSide": raw_order_result.get("info", {}).get("positionSide"),
-                "leverage": raw_order_result.get("info", {}).get("leverage"),
-                "marginMode": raw_order_result.get("info", {}).get("marginMode"),
-                "liquidationPrice": raw_order_result.get("info", {}).get("liquidationPrice"),
-                "marginRatio": raw_order_result.get("info", {}).get("marginRatio"),
-                "unrealizedPnl": raw_order_result.get("info", {}).get("unrealizedPnl")
+                "leverage": raw_order_result.get("info", {}).get("lever"),
+                "marginMode": raw_order_result.get("info", {}).get("tdMode"),
+            }
+        )
+
+    async def _parse_order_result(
+        self, 
+        raw_order_result: dict
+    ) -> PerpetualOrder:
+        """解析永续合约订单响应，包含合约特有字段。"""
+        status = raw_order_result.get("status")
+        if status is None:
+            status = PerpetualOrderStatus.OPEN
+        return PerpetualOrder(
+            identifier=raw_order_result.get("id", ""),
+            status=PerpetualOrderStatus(status),
+            order_type=PerpetualOrderType(raw_order_result.get("type", "unknown").lower()),
+            side=PerpetualOrderSide(raw_order_result.get("side", "unknown").lower()),
+            price= 0.0 if not raw_order_result.get("price", 0.0) else float(raw_order_result.get("price", 0.0)),
+            average=raw_order_result.get("average", None),
+            amount=0.0 if not raw_order_result.get("amount", 0.0) else float(raw_order_result.get("amount", 0.0)),
+            filled= 0.0 if not raw_order_result.get("filled", 0.0) else float(raw_order_result.get("filled", 0.0)),
+            remaining= 0.0 if not raw_order_result.get("remaining", 0.0) else float(raw_order_result.get("remaining", 0.0)),
+            timestamp=0 if not raw_order_result.get("timestamp", 0) else int(raw_order_result.get("timestamp", 0)),
+            datetime=raw_order_result.get("datetime", None),
+            last_trade_timestamp=raw_order_result.get("lastTradeTimestamp", None),
+            symbol=raw_order_result.get("symbol", ""),
+            time_in_force=raw_order_result.get("timeInForce", None),
+            trades=raw_order_result.get("trades", []),
+            fee=raw_order_result.get("fee", None),
+            cost=raw_order_result.get("cost", None),
+            contracts = 0.0,
+            contract_size = 0.0,
+            leverage = 0.0,
+            margin_type = MarginType.CROSS,
+            position_side = PositionSide.LONG,
+            info={
+                "leverage": raw_order_result.get("info", {}).get("lever"),
+                "marginMode": raw_order_result.get("info", {}).get("tdMode"),
             }
         )
 

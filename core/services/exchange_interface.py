@@ -19,6 +19,10 @@ class ExchangeInterface(ABC):
     ) -> Dict[str, Union[str, float]]:
         """Places an order, returning a dictionary with order details including id and status."""
         pass
+
+    @abstractmethod
+    async def fetch_order(self, order_id: str, symbol: str):
+        pass
     
     @abstractmethod
     def fetch_ohlcv(
